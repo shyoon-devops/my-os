@@ -9,6 +9,7 @@ Usage:
 Default:
   - pull current branch from the github remote when it exists
   - sync the pulled branch to configured remotes through make push-remotes
+  - force rebuild the generated user init ELF before building
   - build with ./scripts/docker-build-os.sh
   - restore tracked generated init ELF after build so the next run starts clean
   - do not start QEMU unless a run option is specified
@@ -33,6 +34,13 @@ restore_generated_files() {
       echo "+ git restore -- initramfs/bin/init"
       git restore -- initramfs/bin/init
     fi
+  fi
+}
+
+force_rebuild_user_init() {
+  if [ -e initramfs/bin/init ]; then
+    echo "+ rm -f initramfs/bin/init"
+    rm -f initramfs/bin/init
   fi
 }
 
@@ -153,6 +161,8 @@ else
 fi
 
 if [ "$BUILD" -eq 1 ]; then
+  force_rebuild_user_init
+
   if [ "$CLEAN" -eq 1 ]; then
     echo "+ ./scripts/docker-build-os.sh clean"
     ./scripts/docker-build-os.sh clean

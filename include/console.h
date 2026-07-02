@@ -4,7 +4,7 @@
 #include "types.h"
 
 #define CONSOLE_WIDTH  80
-#define CONSOLE_HEIGHT 50
+#define CONSOLE_HEIGHT 25
 
 #define CONSOLE_SCROLLBACK_LINES 512
 

@@ -22,16 +22,17 @@ section .text
 ; CPU on syscall:
 ;   rcx = user return RIP
 ;   r11 = user RFLAGS
+;   rsp = user RSP
 ;
 syscall_entry:
     cli
 
-    ; sysretq에 필요한 값.
+    ; syscall 진입 직후 rcx/r11에 들어 있는 user return state를 보존한다.
     push rcx
     push r11
 
     ; Phase 10-C/10-E에서는 SYS_exit만 kernel shell 복귀 신호다.
-    ; SYS_write 같은 일반 syscall은 dispatch 후 sysretq로 userland에 복귀한다.
+    ; 일반 syscall은 dispatch 후 iretq로 userland에 복귀한다.
     cmp rax, 60
     je syscall_dispatch_exit
 
@@ -40,42 +41,51 @@ syscall_dispatch_return_user:
     ; C ABI:
     ;   rdi, rsi, rdx, rcx, r8, r9, stack
     ;
-    ; syscall 진입 시 user rsp는 16-byte aligned다.
-    ; rcx/r11 push 이후에도 16-byte aligned이므로,
+    ; rcx/r11 push 이후 rsp는 16-byte aligned 상태다.
     ; 7번째 인자 push 전에 padding 8 byte를 넣어 call alignment를 맞춘다.
     sub rsp, 8
-    push r9          ; arg5, 7번째 C 인자
+    push r9
 
-    mov r9, r8       ; arg4
-    mov r8, r10      ; arg3
-    mov rcx, rdx     ; arg2
-    mov rdx, rsi     ; arg1
-    mov rsi, rdi     ; arg0
-    mov rdi, rax     ; syscall number
+    mov r9, r8
+    mov r8, r10
+    mov rcx, rdx
+    mov rdx, rsi
+    mov rsi, rdi
+    mov rdi, rax
 
     call syscall_dispatch
 
-    add rsp, 16      ; arg5 + alignment padding 제거
+    add rsp, 16
 
+    ; saved user state 복원.
     pop r11
     pop rcx
 
-    sysretq
+    ; SYSRET 대신 IRETQ를 사용한다.
+    ; 현재 toy kernel은 ring3 진입도 iretq 기반이고, 이 경로가 selector/STAR
+    ; 의존성을 제거해서 Phase 10-E 디버깅 범위를 줄인다.
+    mov rdx, rsp
+    push qword 0x23
+    push rdx
+    push r11
+    push qword 0x2B
+    push rcx
+    iretq
 
 syscall_dispatch_exit:
     sub rsp, 8
-    push r9          ; arg5, 7번째 C 인자
+    push r9
 
-    mov r9, r8       ; arg4
-    mov r8, r10      ; arg3
-    mov rcx, rdx     ; arg2
-    mov rdx, rsi     ; arg1
-    mov rsi, rdi     ; arg0
-    mov rdi, rax     ; syscall number
+    mov r9, r8
+    mov r8, r10
+    mov rcx, rdx
+    mov rdx, rsi
+    mov rsi, rdi
+    mov rdi, rax
 
     call syscall_dispatch
 
-    add rsp, 16      ; arg5 + alignment padding 제거
+    add rsp, 16
 
     ; 현재 rsp는 ring3 user stack이다.
     ; ring3_enter()가 저장해둔 kernel stack으로 돌아간다.

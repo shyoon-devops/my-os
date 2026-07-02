@@ -4,6 +4,7 @@
 typedef unsigned long long u64;
 typedef long long s64;
 
+#define USER_SYS_READ   0ULL
 #define USER_SYS_WRITE  1ULL
 #define USER_SYS_GETPID 39ULL
 #define USER_SYS_EXIT   60ULL
@@ -49,6 +50,10 @@ static inline u64 user_syscall3(u64 number, u64 arg0, u64 arg1, u64 arg2) {
     );
 
     return ret;
+}
+
+static inline s64 user_read(u64 fd, void* buffer, u64 size) {
+    return (s64)user_syscall3(USER_SYS_READ, fd, (u64)buffer, size);
 }
 
 static inline s64 user_write(u64 fd, const void* buffer, u64 size) {

@@ -96,6 +96,7 @@ C_SOURCES= \
     kernel/ramfs.c \
     kernel/initramfs.c \
     kernel/elf.c \
+    kernel/syscall.c \
     kernel/fd.c \
     kernel/utils.c
 

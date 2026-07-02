@@ -99,6 +99,8 @@ static const char* shell_completion_commands[] = {
     "fdwrite",
 
     "history",
+    "syscalltest",
+    "syscallinfo",
     "mouseinfo",
     "initramfsinfo",
     "elflast",
@@ -603,14 +605,16 @@ static void shell_complete_command(void) {
 
 static u32 shell_is_path_command(const char* command) {
     /*
-     * 현재 VFS path를 받는 명령만 path autocomplete 대상으로 둔다.
+     * VFS path를 인자로 받는 명령어들.
      *
-     * 나중에 open/stat/rm/mkdir 등이 생기면 여기에 추가하거나,
-     * command registry에 "path arg 지원" metadata를 넣는 방식으로 바꿀 수 있다.
+     * Phase 8에서 elfinfo/elfload가 추가됐는데 여기에 빠져 있으면
+     * "elfinfo /b<Tab>" 같은 경로 자동완성이 동작하지 않는다.
      */
     return shell_streq(command, "ls") ||
            shell_streq(command, "cat") ||
-           shell_streq(command, "fdcat");
+           shell_streq(command, "fdcat") ||
+           shell_streq(command, "elfinfo") ||
+           shell_streq(command, "elfload");
 }
 
 static u32 shell_extract_command(char* out, u32 out_size) {

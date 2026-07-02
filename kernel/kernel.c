@@ -20,6 +20,7 @@
 #include "rtc.h"
 #include "serial.h"
 #include "shell.h"
+#include "syscall.h"
 #include "task.h"
 #include "timer.h"
 #include "tty.h"
@@ -133,6 +134,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     fd_init();
 
     print("\n");
+    syscall_init();
+
+    print("\n");
     command_init();
     command_register_builtin_commands();
     device_register_builtin_commands();
@@ -147,6 +151,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     mouse_register_builtin_commands();
     initramfs_register_builtin_commands();
     elf_register_builtin_commands();
+    syscall_register_builtin_commands();
 
     print("\n");
     pic_init();

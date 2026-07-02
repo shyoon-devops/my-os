@@ -109,6 +109,18 @@ static void mark_user_range(u64 start, u64 size) {
     __asm__ volatile ("mov %%cr3, %%rax\nmov %%rax, %%cr3" ::: "rax", "memory");
 }
 
+void user_mode_mark_user_range(u64 start, u64 size) {
+    mark_user_range(start, size);
+}
+
+u64 user_mode_enter(u64 user_rip) {
+    if (!ready) {
+        return 0xFFFFFFFFFFFFFFFFULL;
+    }
+
+    return ring3_enter(user_rip, user_mode_stack_top());
+}
+
 void user_mode_init(void) {
     u64 blob_start = (u64)ring3_user_blob_start;
     u64 blob_end = (u64)ring3_user_blob_end;

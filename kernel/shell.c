@@ -102,6 +102,7 @@ static const char* shell_completion_commands[] = {
     "syscalltest",
     "syscallentrytest",
     "syscallcpuinfo",
+    "gdtinfo",
     "syscallinfo",
     "mouseinfo",
     "initramfsinfo",
@@ -179,6 +180,57 @@ static u32 shell_starts_with(const char* s, const char* prefix) {
     }
 
     return 1;
+}
+
+static void shell_reduce_to_common_prefix(char* base, const char* other) {
+    if (!base || !other) {
+        return;
+    }
+
+    u32 i = 0;
+
+    while (base[i] && other[i] && base[i] == other[i]) {
+        i++;
+    }
+
+    base[i] = '\0';
+}
+
+static u32 shell_common_prefix_advanced(
+    const char* prefix,
+    const char* common
+) {
+    if (!prefix || !common) {
+        return 0;
+    }
+
+    return shell_strlen(common) > shell_strlen(prefix);
+}
+
+static void shell_replace_path_token_prefix(
+    u32 token_start,
+    const char* completed_path
+) {
+    if (!completed_path) {
+        return;
+    }
+
+    char new_line[SHELL_LINE_MAX];
+    u32 index = 0;
+
+    new_line[0] = '\0';
+
+    for (u32 i = 0; i < token_start && i < line_length; i++) {
+        if (!shell_append_char(new_line, &index, sizeof(new_line), line_buffer[i])) {
+            return;
+        }
+    }
+
+    if (!shell_append_string(new_line, &index, sizeof(new_line), completed_path)) {
+        return;
+    }
+
+    shell_replace_line(new_line);
 }
 
 static void shell_copy_line(char* dst, const char* src, u32 dst_size) {
@@ -602,6 +654,38 @@ static void shell_complete_command(void) {
         return;
     }
 
+    /*
+     * 후보가 여러 개여도 공통 prefix가 더 길면 거기까지 자동완성한다.
+     *
+     * 예:
+     *   input:  sysc<Tab>
+     *   match:  syscallinfo, syscalltest, syscallcpuinfo
+     *   common: syscall
+     *   result: syscall
+     */
+    char common[SHELL_LINE_MAX];
+    u32 common_initialized = 0;
+
+    for (u32 i = 0; i < SHELL_COMPLETION_COUNT; i++) {
+        const char* candidate = shell_completion_commands[i];
+
+        if (!shell_starts_with(candidate, prefix)) {
+            continue;
+        }
+
+        if (!common_initialized) {
+            shell_copy_line(common, candidate, sizeof(common));
+            common_initialized = 1;
+        } else {
+            shell_reduce_to_common_prefix(common, candidate);
+        }
+    }
+
+    if (common_initialized && shell_common_prefix_advanced(prefix, common)) {
+        shell_replace_line(common);
+        return;
+    }
+
     shell_print_completion_matches(prefix);
 }
 
@@ -969,6 +1053,49 @@ static u32 shell_complete_path(void) {
                 sizeof(completed_path)
             )) {
             shell_apply_path_completion(token_start, completed_path, match);
+        }
+
+        return 1;
+    }
+
+    /*
+     * 후보가 여러 개여도 child name의 공통 prefix까지 자동완성한다.
+     *
+     * 예:
+     *   /bi<Tab>
+     *   후보: bin, binary
+     *   common child name: bin
+     *
+     * 단, 아직 유일 후보가 아니므로 '/'나 ' '는 붙이지 않는다.
+     */
+    char common_name[SHELL_LINE_MAX];
+    u32 common_initialized = 0;
+
+    vfs_node_t* child = parent->first_child;
+
+    while (child) {
+        if (shell_starts_with(child->name, prefix)) {
+            if (!common_initialized) {
+                shell_copy_line(common_name, child->name, sizeof(common_name));
+                common_initialized = 1;
+            } else {
+                shell_reduce_to_common_prefix(common_name, child->name);
+            }
+        }
+
+        child = child->next_sibling;
+    }
+
+    if (common_initialized && shell_common_prefix_advanced(prefix, common_name)) {
+        char completed_path[SHELL_LINE_MAX];
+
+        if (shell_build_child_path(
+                parent_path,
+                common_name,
+                completed_path,
+                sizeof(completed_path)
+            )) {
+            shell_replace_path_token_prefix(token_start, completed_path);
         }
 
         return 1;

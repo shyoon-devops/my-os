@@ -3,6 +3,7 @@
 #include "device.h"
 #include "elf.h"
 #include "fd.h"
+#include "gdt.h"
 #include "heap.h"
 #include "idt.h"
 #include "initramfs.h"
@@ -67,6 +68,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     }
 
     print_color("Multiboot2 magic OK\n", COLOR_GREEN_ON_BLACK);
+
+    print("\n");
+    gdt_init();
 
     print("\n");
     idt_init();
@@ -157,6 +161,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     elf_register_builtin_commands();
     syscall_register_builtin_commands();
     syscall_cpu_register_builtin_commands();
+    gdt_register_builtin_commands();
 
     print("\n");
     pic_init();

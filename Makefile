@@ -102,15 +102,20 @@ C_SOURCES= \
     kernel/fd.c \
     kernel/utils.c
 
+ARCH_C_SOURCES= \
+    $(ARCH_DIR)/gdt.c
+
 ASM_SOURCES= \
     $(ARCH_DIR)/interrupt.asm \
     $(ARCH_DIR)/task_switch.asm \
-    $(ARCH_DIR)/syscall_entry.asm
+    $(ARCH_DIR)/syscall_entry.asm \
+    $(ARCH_DIR)/gdt_load.asm
 
 BOOT_SOURCE=$(ARCH_DIR)/boot.asm
 BOOT_OBJECT=$(BUILD_DIR)/$(ARCH_DIR)/boot.o
 
 C_OBJECTS=$(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
+ARCH_C_OBJECTS=$(patsubst %.c,$(BUILD_DIR)/%.o,$(ARCH_C_SOURCES))
 ASM_OBJECTS=$(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
 
 QEMU_MEM?=256M
@@ -159,9 +164,9 @@ $(BUILD_DIR)/%.o: %.asm
 	mkdir -p $(@D)
 	$(ASM) -f elf64 $< -o $@
 
-$(KERNEL): $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT) linker.ld
+$(KERNEL): $(BOOT_OBJECT) $(C_OBJECTS) $(ARCH_C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT) linker.ld
 	mkdir -p $(@D)
-	$(LD) $(LDFLAGS) -o $(KERNEL) $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT)
+	$(LD) $(LDFLAGS) -o $(KERNEL) $(BOOT_OBJECT) $(C_OBJECTS) $(ARCH_C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT)
 
 $(ISO): $(KERNEL) grub.cfg
 	mkdir -p $(ISO_DIR)/boot/grub

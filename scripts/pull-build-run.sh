@@ -38,7 +38,7 @@ restore_generated_files() {
 }
 
 force_rebuild_user_elves() {
-  for elf in initramfs/bin/init initramfs/bin/hello; do
+  for elf in initramfs/bin/init initramfs/bin/hello initramfs/bin/readkey; do
     if [ -e "$elf" ]; then
       echo "+ rm -f $elf"
       rm -f "$elf"

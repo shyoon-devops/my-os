@@ -14,6 +14,8 @@
 #define SYSCALL_ERR_BADFD ((u64)-2)
 #define SYSCALL_ERR_FAULT ((u64)-3)
 
+#define SYSCALL_NO_USER_EXIT ((u64)-1)
+
 typedef u64 (*syscall_handler_t)(
     u64 arg0,
     u64 arg1,
@@ -40,6 +42,8 @@ u64 syscall_dispatch(
     u64 arg4,
     u64 arg5
 );
+
+u64 syscall_take_user_exit_code(void);
 
 void syscall_register_builtin_commands(void);
 

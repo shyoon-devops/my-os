@@ -2,6 +2,9 @@
 build/
 iso/
 
+# Generated initramfs artifacts
+initramfs/bin/init
+
 # Object / binary artifacts
 *.o
 *.a

@@ -4,6 +4,7 @@ iso/
 
 # Generated initramfs artifacts
 initramfs/bin/init
+initramfs/bin/hello
 
 # Object / binary artifacts
 *.o

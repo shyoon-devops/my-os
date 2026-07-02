@@ -35,9 +35,8 @@ syscall_entry:
     cli
 
     ; SYSCALL은 x86_64에서 RSP를 자동으로 kernel stack으로 바꾸지 않는다.
-    ; 따라서 user stack 위에서 C handler나 scheduler를 실행하면 user stack이 깨진다.
-    ; 진입 직후 user return state를 저장하고, ring3_enter()가 저장해 둔
-    ; 현재 task의 kernel stack으로 전환한 뒤 dispatch한다.
+    ; 따라서 진입 직후 user return state를 저장하고, ring3_enter()가 저장한
+    ; kernel stack으로 전환한 뒤 C syscall handler를 실행한다.
     mov [rel syscall_user_rsp], rsp
     mov [rel syscall_user_rip], rcx
     mov [rel syscall_user_rflags], r11
@@ -45,12 +44,24 @@ syscall_entry:
 
     mov rsp, [rel ring3_saved_kernel_rsp]
 
+    ; User register 보존.
+    ; userland inline syscall wrapper는 rcx/r11/rax 외 레지스터가 보존된다고 본다.
+    ; C syscall_dispatch()는 caller-saved register를 자유롭게 덮을 수 있으므로,
+    ; userland로 돌아가기 전에 원래 값을 복원한다.
+    push rdi
+    push rsi
+    push rdx
+    push r10
+    push r8
+    push r9
+
     ; syscall_dispatch(number, arg0, arg1, arg2, arg3, arg4, arg5)
     ; C ABI:
     ;   rdi, rsi, rdx, rcx, r8, r9, stack
     ;
-    ; ring3_saved_kernel_rsp는 normal C call 진입 직후의 stack pointer라
-    ; 8-byte misaligned 상태다. arg5 push 뒤 call alignment가 맞는다.
+    ; ring3_saved_kernel_rsp는 8-byte misaligned 상태다.
+    ; 위에서 register 6개를 저장해도 여전히 8-byte misaligned이고,
+    ; arg5 push 뒤 call alignment가 맞는다.
     push r9
 
     mov r9, r8
@@ -71,6 +82,14 @@ syscall_entry:
     cmp qword [rel syscall_number], 60
     je syscall_exit_to_kernel_shell
 
+    ; dispatch return value는 rax에 둔 채 user register를 복원한다.
+    pop r9
+    pop r8
+    pop r10
+    pop rdx
+    pop rsi
+    pop rdi
+
     ; 일반 syscall은 저장해 둔 user state로 iretq 복귀한다.
     mov rdx, [rel syscall_user_rsp]
     mov r11, [rel syscall_user_rflags]
@@ -84,6 +103,9 @@ syscall_entry:
     iretq
 
 syscall_exit_to_kernel_shell:
+    ; SYS_exit은 userland로 돌아가지 않으므로 저장해 둔 user register를 폐기한다.
+    add rsp, 48
+
     ; rax에는 syscall_dispatch(SYS_exit)의 반환값, 즉 exit code가 있다.
     ; ring3_enter()의 원래 kernel stack으로 돌아가 ret한다.
     mov rsp, [rel ring3_saved_kernel_rsp]

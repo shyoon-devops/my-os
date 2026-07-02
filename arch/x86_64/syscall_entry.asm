@@ -22,6 +22,9 @@ syscall_entry:
     mov [rel syscall_user_rflags], r11
     mov [rel syscall_number], rax
 
+    cmp rax, 60
+    je syscall_exit_direct
+
     mov rsp, [rel ring3_saved_kernel_rsp]
 
     push rdi
@@ -55,9 +58,6 @@ syscall_call_dispatch_irq_on:
 syscall_after_dispatch:
     add rsp, 8
 
-    cmp qword [rel syscall_number], 60
-    je syscall_exit_to_kernel_shell
-
     pop r9
     pop r8
     pop r10
@@ -72,9 +72,8 @@ syscall_after_dispatch:
     push qword [rel syscall_user_rip]
     iretq
 
-syscall_exit_to_kernel_shell:
-    add rsp, 48
-
+syscall_exit_direct:
+    mov rax, rdi
     mov rsp, [rel ring3_saved_kernel_rsp]
 
     mov dx, 0x10

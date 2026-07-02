@@ -3,6 +3,7 @@ bits 64
 global syscall_entry
 
 extern syscall_dispatch
+extern syscall_take_user_exit_code
 extern ring3_saved_kernel_rsp
 
 section .text
@@ -30,9 +31,6 @@ syscall_entry:
     push rcx
     push r11
 
-    ; SYS_exit 감지를 위해 원래 syscall number 보존.
-    push rax
-
     ; syscall_dispatch(number, arg0, arg1, arg2, arg3, arg4, arg5)
     ; C ABI:
     ;   rdi, rsi, rdx, rcx, r8, r9, stack
@@ -49,12 +47,21 @@ syscall_entry:
 
     add rsp, 8       ; arg5 제거
 
-    pop r10          ; original syscall number
+    ; syscall_dispatch의 반환값을 보존한 뒤 SYS_exit 요청 여부를 확인한다.
+    ; SYS_write의 반환값이 message length이므로, syscall number stack 값에
+    ; 의존하면 디버깅이 어렵다. sys_exit handler가 남긴 explicit flag를 본다.
+    push rax
 
-    ; SYS_exit = 60
-    ; Phase 10-C/10-E에서는 SYS_exit을 kernel shell 복귀 신호로 사용한다.
-    cmp r10, 60
-    je syscall_exit_to_kernel_shell
+    ; 현재 rsp는 16-byte align에서 8만큼 어긋나 있으므로 C call 전 보정한다.
+    sub rsp, 8
+    call syscall_take_user_exit_code
+    add rsp, 8
+
+    mov r10, rax     ; r10 = exit code or SYSCALL_NO_USER_EXIT
+    pop rax          ; rax = original syscall return value
+
+    cmp r10, -1
+    jne syscall_exit_to_kernel_shell
 
     pop r11
     pop rcx
@@ -64,11 +71,9 @@ syscall_entry:
 syscall_exit_to_kernel_shell:
     ; 현재 rsp는 ring3 user stack이다.
     ; ring3_enter()가 저장해둔 kernel stack으로 돌아간다.
+    mov rax, r10
     mov rsp, [rel ring3_saved_kernel_rsp]
 
-    ; rax에는 syscall_dispatch(SYS_exit)의 반환값이 들어 있다.
-    ; ax를 segment selector 임시 레지스터로 쓰면 low 16bit가 0x10으로
-    ; 덮여 exit code가 16으로 보인다. dx를 써서 rax를 보존한다.
     mov dx, 0x10
     mov ds, dx
     mov es, dx

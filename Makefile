@@ -170,28 +170,36 @@ check: $(KERNEL)
 	@readelf -h $(KERNEL) | grep -E 'Class|Machine|Entry'
 	@readelf -S $(KERNEL) | grep -E 'multiboot|text|rodata|data|bss'
 
-run: $(ISO)
+require-iso:
+	@if [ ! -f "$(ISO)" ]; then \
+	  echo "Missing $(ISO)"; \
+	  echo "Build it first with:"; \
+	  echo "  ./scripts/docker-build-os.sh"; \
+	  exit 1; \
+	fi
+
+run: require-iso
 	$(QEMU) $(QEMU_COMMON)
 
-run-curses: $(ISO)
+run-curses: require-iso
 	$(QEMU) $(QEMU_COMMON) \
 	  -display curses
 
-run-cocoa: $(ISO)
+run-cocoa: require-iso
 	$(QEMU) $(QEMU_COMMON) \
 	  -display cocoa,zoom-to-fit=on
 
-run-cocoa-full: $(ISO)
+run-cocoa-full: require-iso
 	$(QEMU) $(QEMU_COMMON) \
 	  -display cocoa,zoom-to-fit=on \
 	  -full-screen
 
-run-cocoa-serial: $(ISO)
+run-cocoa-serial: require-iso
 	$(QEMU) $(QEMU_COMMON) \
 	  -display cocoa,zoom-to-fit=on \
 	  -serial stdio
 
-run-curses-serial-log: $(ISO)
+run-curses-serial-log: require-iso
 	rm -f serial.log
 	$(QEMU) $(QEMU_COMMON) \
 	  -display curses \
@@ -205,7 +213,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-08] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-09a] your message"'; \
 	  exit 1; \
 	fi
 	git add --all
@@ -218,4 +226,4 @@ clean:
 	rm -rf iso
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 
-.PHONY: all prepare-initramfs check run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean
+.PHONY: all prepare-initramfs check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean

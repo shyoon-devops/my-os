@@ -1,28 +1,90 @@
 #include "console.h"
 #include "io.h"
+#include "types.h"
 
-#define VGA_WIDTH  80
-#define VGA_HEIGHT 25
 #define VGA_MEMORY ((volatile u16*)0xB8000)
-
-#define VGA_ENTRY(ch, color) (((u16)(color) << 8) | (u8)(ch))
 
 #define VGA_CRTC_INDEX 0x3D4
 #define VGA_CRTC_DATA  0x3D5
 
-static u32 cursor_row = 0;
-static u32 cursor_col = 0;
+typedef struct console_cell {
+    char ch;
+    u8 color;
+} console_cell_t;
+
+/*
+ * scrollback buffer:
+ *   최근 CONSOLE_SCROLLBACK_LINES 줄을 저장한다.
+ *
+ * logical line:
+ *   콘솔이 시작된 뒤 출력된 줄 번호.
+ *   current_line은 현재 쓰는 줄의 logical index다.
+ *
+ * physical line:
+ *   scrollback 배열 안의 실제 index.
+ *   logical % CONSOLE_SCROLLBACK_LINES 로 계산한다.
+ */
+static console_cell_t scrollback[CONSOLE_SCROLLBACK_LINES][CONSOLE_WIDTH];
+
+static u64 current_line = 0;
+static u32 current_col = 0;
+
+static u64 viewport_top = 0;
+
 static u8 current_color = COLOR_WHITE_ON_BLACK;
 
-static void console_update_hardware_cursor(void) {
-    u16 pos = (u16)(cursor_row * VGA_WIDTH + cursor_col);
+static u64 min_u64(u64 a, u64 b) {
+    return a < b ? a : b;
+}
 
-    /*
-     * VGA text mode cursor position register.
-     *
-     * index 0x0F = cursor location low byte
-     * index 0x0E = cursor location high byte
-     */
+static u64 max_u64(u64 a, u64 b) {
+    return a > b ? a : b;
+}
+
+static u64 scrollback_oldest_line(void) {
+    if (current_line + 1 <= CONSOLE_SCROLLBACK_LINES) {
+        return 0;
+    }
+
+    return current_line + 1 - CONSOLE_SCROLLBACK_LINES;
+}
+
+static u64 scrollback_bottom_top(void) {
+    if (current_line + 1 <= CONSOLE_HEIGHT) {
+        return 0;
+    }
+
+    return current_line + 1 - CONSOLE_HEIGHT;
+}
+
+static u32 physical_line(u64 logical_line) {
+    return (u32)(logical_line % CONSOLE_SCROLLBACK_LINES);
+}
+
+static void clear_scrollback_line(u64 logical_line) {
+    u32 physical = physical_line(logical_line);
+
+    for (u32 col = 0; col < CONSOLE_WIDTH; col++) {
+        scrollback[physical][col].ch = ' ';
+        scrollback[physical][col].color = current_color;
+    }
+}
+
+static u16 vga_entry(char ch, u8 color) {
+    return (u16)((u16)color << 8) | (u8)ch;
+}
+
+static void hardware_cursor_set(u32 row, u32 col) {
+    if (row >= CONSOLE_HEIGHT) {
+        row = CONSOLE_HEIGHT - 1;
+    }
+
+    if (col >= CONSOLE_WIDTH) {
+        col = CONSOLE_WIDTH - 1;
+    }
+
+    u16 pos = (u16)(row * CONSOLE_WIDTH + col);
+
     outb(VGA_CRTC_INDEX, 0x0F);
     outb(VGA_CRTC_DATA, (u8)(pos & 0xFF));
 
@@ -30,84 +92,75 @@ static void console_update_hardware_cursor(void) {
     outb(VGA_CRTC_DATA, (u8)((pos >> 8) & 0xFF));
 }
 
-static void clear_row(u32 row) {
-    for (u32 x = 0; x < VGA_WIDTH; x++) {
-        VGA_MEMORY[row * VGA_WIDTH + x] =
-            VGA_ENTRY(' ', COLOR_WHITE_ON_BLACK);
-    }
-}
+static void render_viewport(void) {
+    u64 oldest = scrollback_oldest_line();
+    u64 bottom = scrollback_bottom_top();
 
-static void scroll_one_line(void) {
-    for (u32 y = 1; y < VGA_HEIGHT; y++) {
-        for (u32 x = 0; x < VGA_WIDTH; x++) {
-            VGA_MEMORY[(y - 1) * VGA_WIDTH + x] =
-                VGA_MEMORY[y * VGA_WIDTH + x];
+    if (viewport_top < oldest) {
+        viewport_top = oldest;
+    }
+
+    if (viewport_top > bottom) {
+        viewport_top = bottom;
+    }
+
+    for (u32 row = 0; row < CONSOLE_HEIGHT; row++) {
+        u64 logical = viewport_top + row;
+
+        for (u32 col = 0; col < CONSOLE_WIDTH; col++) {
+            char ch = ' ';
+            u8 color = current_color;
+
+            if (logical >= oldest && logical <= current_line) {
+                console_cell_t cell =
+                    scrollback[physical_line(logical)][col];
+
+                ch = cell.ch;
+                color = cell.color;
+            }
+
+            VGA_MEMORY[row * CONSOLE_WIDTH + col] = vga_entry(ch, color);
         }
     }
 
-    clear_row(VGA_HEIGHT - 1);
+    /*
+     * 현재 입력 cursor가 viewport 안에 있을 때만 실제 위치로 보여준다.
+     * 과거 로그를 보는 중이면 cursor는 우하단에 둔다.
+     */
+    if (current_line >= viewport_top &&
+        current_line < viewport_top + CONSOLE_HEIGHT) {
+        hardware_cursor_set((u32)(current_line - viewport_top), current_col);
+    } else {
+        hardware_cursor_set(CONSOLE_HEIGHT - 1, CONSOLE_WIDTH - 1);
+    }
 }
 
-static void scroll_if_needed(void) {
-    while (cursor_row >= VGA_HEIGHT) {
-        scroll_one_line();
-        cursor_row = VGA_HEIGHT - 1;
-        cursor_col = 0;
-    }
+static u32 viewport_is_bottom(void) {
+    return viewport_top == scrollback_bottom_top();
+}
 
-    console_update_hardware_cursor();
+static void move_to_next_line(void) {
+    current_line++;
+    current_col = 0;
+
+    clear_scrollback_line(current_line);
+
+    if (viewport_is_bottom()) {
+        viewport_top = scrollback_bottom_top();
+    }
 }
 
 void console_clear(void) {
-    for (u32 y = 0; y < VGA_HEIGHT; y++) {
-        clear_row(y);
-    }
-
-    cursor_row = 0;
-    cursor_col = 0;
+    current_line = 0;
+    current_col = 0;
+    viewport_top = 0;
     current_color = COLOR_WHITE_ON_BLACK;
 
-    console_update_hardware_cursor();
-}
-
-void console_put_char(char c) {
-    if (c == '\n') {
-        cursor_col = 0;
-        cursor_row++;
-        scroll_if_needed();
-        return;
+    for (u64 line = 0; line < CONSOLE_SCROLLBACK_LINES; line++) {
+        clear_scrollback_line(line);
     }
 
-    VGA_MEMORY[cursor_row * VGA_WIDTH + cursor_col] =
-        VGA_ENTRY(c, current_color);
-
-    cursor_col++;
-
-    if (cursor_col >= VGA_WIDTH) {
-        cursor_col = 0;
-        cursor_row++;
-    }
-
-    scroll_if_needed();
-}
-
-void console_backspace(void) {
-    if (cursor_col > 0) {
-        cursor_col--;
-    } else {
-        if (cursor_row == 0) {
-            console_update_hardware_cursor();
-            return;
-        }
-
-        cursor_row--;
-        cursor_col = VGA_WIDTH - 1;
-    }
-
-    VGA_MEMORY[cursor_row * VGA_WIDTH + cursor_col] =
-        VGA_ENTRY(' ', current_color);
-
-    console_update_hardware_cursor();
+    render_viewport();
 }
 
 void console_set_color(u8 color) {
@@ -118,35 +171,173 @@ u8 console_get_color(void) {
     return current_color;
 }
 
-u32 console_get_row(void) {
-    return cursor_row;
+void console_put_char(char c) {
+    /*
+     * 현재는 입력/출력이 들어오면 항상 bottom view로 복귀시킨다.
+     *
+     * 다음 Phase 5-E에서 PageUp/PageDown을 붙일 때,
+     * "과거 로그를 보는 상태에서 키 입력 시 bottom 복귀" 정책을
+     * 더 명확히 다룰 수 있다.
+     */
+    viewport_top = scrollback_bottom_top();
+
+    if (c == '\n') {
+        move_to_next_line();
+        render_viewport();
+        return;
+    }
+
+    if (c == '\r') {
+        current_col = 0;
+        render_viewport();
+        return;
+    }
+
+    if (c == '\t') {
+        for (u32 i = 0; i < 4; i++) {
+            console_put_char(' ');
+        }
+
+        return;
+    }
+
+    if (c == '\b') {
+        if (current_col > 0) {
+            current_col--;
+
+            console_cell_t* cell =
+                &scrollback[physical_line(current_line)][current_col];
+
+            cell->ch = ' ';
+            cell->color = current_color;
+        }
+
+        render_viewport();
+        return;
+    }
+
+    if (current_col >= CONSOLE_WIDTH) {
+        move_to_next_line();
+    }
+
+    console_cell_t* cell =
+        &scrollback[physical_line(current_line)][current_col];
+
+    cell->ch = c;
+    cell->color = current_color;
+
+    current_col++;
+
+    if (current_col >= CONSOLE_WIDTH) {
+        move_to_next_line();
+    }
+
+    render_viewport();
 }
 
-u32 console_get_col(void) {
-    return cursor_col;
+void console_write(const char* s) {
+    if (!s) {
+        return;
+    }
+
+    while (*s) {
+        console_put_char(*s);
+        s++;
+    }
 }
 
 void console_set_cursor(u32 row, u32 col) {
-    if (row >= VGA_HEIGHT) {
-        row = VGA_HEIGHT - 1;
+    if (row >= CONSOLE_HEIGHT) {
+        row = CONSOLE_HEIGHT - 1;
     }
 
-    if (col >= VGA_WIDTH) {
-        col = VGA_WIDTH - 1;
+    if (col >= CONSOLE_WIDTH) {
+        col = CONSOLE_WIDTH - 1;
     }
 
-    cursor_row = row;
-    cursor_col = col;
+    viewport_top = scrollback_bottom_top();
 
-    console_update_hardware_cursor();
+    current_line = viewport_top + row;
+    current_col = col;
+
+    render_viewport();
 }
 
 void console_get_cursor(u32* row, u32* col) {
+    u32 visible_row = 0;
+
+    if (current_line >= viewport_top) {
+        visible_row = (u32)(current_line - viewport_top);
+    }
+
+    if (visible_row >= CONSOLE_HEIGHT) {
+        visible_row = CONSOLE_HEIGHT - 1;
+    }
+
     if (row) {
-        *row = cursor_row;
+        *row = visible_row;
     }
 
     if (col) {
-        *col = cursor_col;
+        *col = current_col;
     }
+}
+
+void console_scroll_page_up(void) {
+    u64 oldest = scrollback_oldest_line();
+
+    if (viewport_top <= oldest) {
+        viewport_top = oldest;
+        render_viewport();
+        return;
+    }
+
+    u64 amount = CONSOLE_HEIGHT;
+
+    if (viewport_top < oldest + amount) {
+        viewport_top = oldest;
+    } else {
+        viewport_top -= amount;
+    }
+
+    render_viewport();
+}
+
+void console_scroll_page_down(void) {
+    u64 bottom = scrollback_bottom_top();
+
+    if (viewport_top >= bottom) {
+        viewport_top = bottom;
+        render_viewport();
+        return;
+    }
+
+    viewport_top = min_u64(viewport_top + CONSOLE_HEIGHT, bottom);
+
+    render_viewport();
+}
+
+void console_scroll_to_bottom(void) {
+    viewport_top = scrollback_bottom_top();
+    render_viewport();
+}
+
+u32 console_is_scrolled(void) {
+    return viewport_top != scrollback_bottom_top();
+}
+
+u32 console_scrollback_count(void) {
+    u64 count = current_line + 1;
+
+    return (u32)min_u64(count, CONSOLE_SCROLLBACK_LINES);
+}
+
+u32 console_viewport_offset(void) {
+    u64 bottom = scrollback_bottom_top();
+
+    if (viewport_top >= bottom) {
+        return 0;
+    }
+
+    return (u32)(bottom - viewport_top);
 }

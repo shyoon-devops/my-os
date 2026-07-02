@@ -3,24 +3,60 @@
 
 #include "types.h"
 
-#define COLOR_WHITE_ON_BLACK   0x0F
-#define COLOR_GREEN_ON_BLACK   0x0A
-#define COLOR_RED_ON_BLACK     0x0C
-#define COLOR_CYAN_ON_BLACK    0x0B
-#define COLOR_YELLOW_ON_BLACK  0x0E
+#define CONSOLE_WIDTH  80
+#define CONSOLE_HEIGHT 25
+
+#define CONSOLE_SCROLLBACK_LINES 256
+
+#define VGA_COLOR(fg, bg) ((u8)((bg << 4) | (fg)))
+
+#define VGA_COLOR_BLACK         0
+#define VGA_COLOR_BLUE          1
+#define VGA_COLOR_GREEN         2
+#define VGA_COLOR_CYAN          3
+#define VGA_COLOR_RED           4
+#define VGA_COLOR_MAGENTA       5
+#define VGA_COLOR_BROWN         6
+#define VGA_COLOR_LIGHT_GREY    7
+#define VGA_COLOR_DARK_GREY     8
+#define VGA_COLOR_LIGHT_BLUE    9
+#define VGA_COLOR_LIGHT_GREEN   10
+#define VGA_COLOR_LIGHT_CYAN    11
+#define VGA_COLOR_LIGHT_RED     12
+#define VGA_COLOR_LIGHT_MAGENTA 13
+#define VGA_COLOR_LIGHT_BROWN   14
+#define VGA_COLOR_WHITE         15
+
+#define COLOR_WHITE_ON_BLACK  VGA_COLOR(VGA_COLOR_WHITE, VGA_COLOR_BLACK)
+#define COLOR_GREEN_ON_BLACK  VGA_COLOR(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK)
+#define COLOR_RED_ON_BLACK    VGA_COLOR(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK)
+#define COLOR_YELLOW_ON_BLACK VGA_COLOR(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK)
+#define COLOR_CYAN_ON_BLACK   VGA_COLOR(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK)
 
 void console_clear(void);
 
 void console_put_char(char c);
-void console_backspace(void);
+void console_write(const char* s);
 
 void console_set_color(u8 color);
 u8 console_get_color(void);
 
-u32 console_get_row(void);
-u32 console_get_col(void);
-
 void console_set_cursor(u32 row, u32 col);
 void console_get_cursor(u32* row, u32* col);
+
+/*
+ * Phase 5-D:
+ *   scrollback buffer 기반 console backend.
+ *
+ * 이번 단계에서는 버퍼와 viewport 함수만 만든다.
+ * PageUp/PageDown 키 연결은 다음 Phase 5-E에서 한다.
+ */
+void console_scroll_page_up(void);
+void console_scroll_page_down(void);
+void console_scroll_to_bottom(void);
+
+u32 console_is_scrolled(void);
+u32 console_scrollback_count(void);
+u32 console_viewport_offset(void);
 
 #endif

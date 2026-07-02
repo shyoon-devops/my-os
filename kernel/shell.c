@@ -28,19 +28,6 @@ static u32 prompt_row = 0;
 static u32 prompt_col = 0;
 static u32 last_rendered_length = 0;
 
-/*
- * history는 ring buffer다.
- *
- * history_next:
- *   다음 명령을 저장할 물리 index.
- *
- * history_count:
- *   현재 저장된 명령 개수. 최대 SHELL_HISTORY_SIZE.
- *
- * history_view:
- *   현재 ↑/↓로 보고 있는 logical index.
- *   -1이면 history 탐색 중이 아님.
- */
 static char history[SHELL_HISTORY_SIZE][SHELL_HISTORY_LINE_MAX];
 static u32 history_count = 0;
 static u32 history_next = 0;
@@ -49,14 +36,6 @@ static s32 history_view = -1;
 static char history_draft[SHELL_HISTORY_LINE_MAX];
 static u32 history_draft_valid = 0;
 
-/*
- * Phase 5-B:
- *   최소 명령어 자동완성 후보 목록.
- *
- * 지금은 shell 내부 static list로 시작한다.
- * 나중에 command registry에서 등록된 명령어를 순회하는 API를 만들면
- * 이 목록은 제거할 수 있다.
- */
 static const char* shell_completion_commands[] = {
     "help",
     "clear",
@@ -117,7 +96,8 @@ static const char* shell_completion_commands[] = {
     "initramfsinfo",
     "elflast",
     "elfload",
-    "elfinfo"
+    "elfinfo",
+    "initrun"
 };
 
 #define SHELL_COMPLETION_COUNT \
@@ -224,8 +204,6 @@ static u32 shell_common_prefix_advanced(
 
     return shell_strlen(common) > shell_strlen(prefix);
 }
-
-
 
 static void shell_replace_path_token_prefix(
     u32 token_start,
@@ -336,14 +314,6 @@ static u32 shell_append_string(
 }
 
 static u32 history_physical_index(u32 logical_index) {
-    /*
-     * logical index:
-     *   0 = 가장 오래된 명령
-     *   history_count - 1 = 가장 최근 명령
-     *
-     * buffer가 아직 가득 차지 않았으면 logical == physical.
-     * 가득 찼으면 history_next가 가장 오래된 항목이다.
-     */
     if (history_count < SHELL_HISTORY_SIZE) {
         return logical_index;
     }
@@ -376,9 +346,6 @@ static void history_add(const char* line) {
         return;
     }
 
-    /*
-     * 같은 명령을 연속으로 입력하면 중복 저장하지 않는다.
-     */
     const char* latest = history_latest();
 
     if (latest && shell_streq(latest, line)) {
@@ -484,10 +451,6 @@ static void shell_history_up(void) {
     }
 
     if (history_view < 0) {
-        /*
-         * history 탐색을 처음 시작할 때 현재 입력 중이던 내용을 저장한다.
-         * ↓로 끝까지 내려오면 이 draft를 복원한다.
-         */
         shell_copy_line(history_draft, line_buffer, SHELL_HISTORY_LINE_MAX);
         history_draft_valid = 1;
 
@@ -524,10 +487,6 @@ static void shell_history_down(void) {
         return;
     }
 
-    /*
-     * 가장 최신 history에서 한 번 더 ↓를 누르면,
-     * history 탐색 전에 입력 중이던 draft로 돌아간다.
-     */
     history_view = -1;
 
     if (history_draft_valid) {
@@ -546,19 +505,10 @@ static u32 shell_get_command_prefix(char* out, u32 out_size) {
 
     out[0] = '\0';
 
-    /*
-     * 이번 최소 구현에서는 cursor가 줄 끝에 있을 때만 자동완성한다.
-     * 중간 커서 위치에서 완성하면 line editor 처리가 복잡해지므로
-     * 나중 단계로 미룬다.
-     */
     if (cursor_index != line_length) {
         return 0;
     }
 
-    /*
-     * command 이름만 자동완성한다.
-     * 즉 공백이 있으면 command completion 대상이 아니다.
-     */
     for (u32 i = 0; i < line_length; i++) {
         if (shell_is_space(line_buffer[i])) {
             return 0;
@@ -609,9 +559,6 @@ static void shell_apply_completion(const char* command) {
 
     u32 len = shell_strlen(completed);
 
-    /*
-     * 명령어가 완성되면 뒤에 공백 하나를 붙여서 바로 인자를 칠 수 있게 한다.
-     */
     if (len + 1 < SHELL_LINE_MAX) {
         completed[len] = ' ';
         completed[len + 1] = '\0';
@@ -664,15 +611,6 @@ static void shell_complete_command(void) {
         return;
     }
 
-    /*
-     * 후보가 여러 개여도 공통 prefix가 더 길면 거기까지 자동완성한다.
-     *
-     * 예:
-     *   input:  sysc<Tab>
-     *   match:  syscallinfo, syscalltest, syscallcpuinfo
-     *   common: syscall
-     *   result: syscall
-     */
     char common[SHELL_LINE_MAX];
     u32 common_initialized = 0;
 
@@ -693,14 +631,6 @@ static void shell_complete_command(void) {
 
     if (common_initialized && shell_common_prefix_advanced(prefix, common)) {
         shell_replace_line(common);
-
-        /*
-         * UX:
-         *   sys<Tab> 입력 시 syscall 까지 공통 prefix를 채우고,
-         *   동시에 syscall* 후보를 보여준다.
-         *
-         * 그래야 사용자가 syscall 자체가 완성 명령어라고 착각하지 않는다.
-         */
         shell_print_completion_matches(common);
         return;
     }
@@ -709,17 +639,12 @@ static void shell_complete_command(void) {
 }
 
 static u32 shell_is_path_command(const char* command) {
-    /*
-     * VFS path를 인자로 받는 명령어들.
-     *
-     * Phase 8에서 elfinfo/elfload가 추가됐는데 여기에 빠져 있으면
-     * "elfinfo /b<Tab>" 같은 경로 자동완성이 동작하지 않는다.
-     */
     return shell_streq(command, "ls") ||
            shell_streq(command, "cat") ||
            shell_streq(command, "fdcat") ||
            shell_streq(command, "elfinfo") ||
-           shell_streq(command, "elfload");
+           shell_streq(command, "elfload") ||
+           shell_streq(command, "initrun");
 }
 
 static u32 shell_extract_command(char* out, u32 out_size) {
@@ -787,10 +712,6 @@ static u32 shell_find_path_token_start(u32* out_start) {
         i++;
     }
 
-    /*
-     * 이번 최소 구현은 첫 번째 인자 하나만 autocomplete한다.
-     * 즉 "cmd arg1 arg2"에서 arg2 자동완성은 아직 하지 않는다.
-     */
     *out_start = i;
 
     return 1;
@@ -817,12 +738,6 @@ static u32 shell_make_path_context(
     const char* token = &line_buffer[token_start];
     u32 token_len = line_length - token_start;
 
-    /*
-     * VFS는 현재 absolute path만 지원한다.
-     *
-     * "cat <Tab>"처럼 token이 비어 있으면 root("/") 기준으로 본다.
-     * "cat /h<Tab>"처럼 token이 '/'로 시작해야 경로 자동완성을 한다.
-     */
     if (token_len == 0) {
         shell_copy_line(parent_path, "/", parent_size);
         prefix[0] = '\0';
@@ -1078,16 +993,6 @@ static u32 shell_complete_path(void) {
         return 1;
     }
 
-    /*
-     * 후보가 여러 개여도 child name의 공통 prefix까지 자동완성한다.
-     *
-     * 예:
-     *   /bi<Tab>
-     *   후보: bin, binary
-     *   common child name: bin
-     *
-     * 단, 아직 유일 후보가 아니므로 '/'나 ' '는 붙이지 않는다.
-     */
     char common_name[SHELL_LINE_MAX];
     u32 common_initialized = 0;
 
@@ -1116,12 +1021,6 @@ static u32 shell_complete_path(void) {
                 sizeof(completed_path)
             )) {
             shell_replace_path_token_prefix(token_start, completed_path);
-
-            /*
-             * UX:
-             *   경로도 공통 prefix를 채운 뒤 후보가 여전히 여러 개면
-             *   그 후보 목록을 바로 보여준다.
-             */
             shell_print_path_matches(parent_path, common_name);
         }
 
@@ -1134,10 +1033,6 @@ static u32 shell_complete_path(void) {
 }
 
 static void shell_complete_tab(void) {
-    /*
-     * 공백 뒤에서 path command라면 경로 자동완성을 먼저 시도한다.
-     * 그 외에는 명령어 자동완성으로 처리한다.
-     */
     if (shell_complete_path()) {
         return;
     }
@@ -1146,10 +1041,6 @@ static void shell_complete_tab(void) {
 }
 
 static void shell_on_char(char c) {
-    /*
-     * 사용자가 새 문자를 입력하거나 편집하면
-     * history 탐색 상태는 끝난 것으로 본다.
-     */
     if (c != '\n') {
         history_reset_view();
     }
@@ -1319,15 +1210,6 @@ static void shell_task(void* arg) {
     for (;;) {
         tty_key_t key;
 
-        /*
-         * Phase 6:
-         *   shell이 tty를 직접 읽지 않고 fd 0(stdin)을 통해 읽는다.
-         *
-         * 흐름:
-         *   fd_read(0)
-         *     -> /dev/tty0 read
-         *     -> tty_read_key_blocking()
-         */
         s64 read = fd_read(FD_STDIN, &key, sizeof(key));
 
         if (read == (s64)sizeof(key)) {

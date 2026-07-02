@@ -6,11 +6,13 @@ extern syscall_dispatch
 extern ring3_saved_kernel_rsp
 
 section .bss
-align 8
+align 16
 syscall_user_rsp:    resq 1
 syscall_user_rip:    resq 1
 syscall_user_rflags: resq 1
 syscall_number:      resq 1
+syscall_stack:       resb 16384
+syscall_stack_top:
 
 section .text
 
@@ -25,7 +27,7 @@ syscall_entry:
     cmp rax, 60
     je syscall_exit_direct
 
-    mov rsp, [rel ring3_saved_kernel_rsp]
+    lea rsp, [rel syscall_stack_top]
 
     push rdi
     push rsi
@@ -34,6 +36,7 @@ syscall_entry:
     push r8
     push r9
 
+    sub rsp, 8
     push r9
 
     mov r9, r8
@@ -56,7 +59,7 @@ syscall_call_dispatch_irq_on:
     cli
 
 syscall_after_dispatch:
-    add rsp, 8
+    add rsp, 16
 
     pop r9
     pop r8

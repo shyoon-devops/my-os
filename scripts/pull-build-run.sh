@@ -10,6 +10,7 @@ Default:
   - pull current branch from the github remote when it exists
   - sync the pulled branch to configured remotes through make push-remotes
   - build with ./scripts/docker-build-os.sh
+  - restore tracked generated init ELF after build so the next run starts clean
   - do not start QEMU unless a run option is specified
 
 Options:
@@ -24,6 +25,15 @@ Options:
   --allow-dirty         Allow local uncommitted changes before pulling
   -h, --help            Show this help
 USAGE
+}
+
+restore_generated_files() {
+  if git ls-files --error-unmatch initramfs/bin/init >/dev/null 2>&1; then
+    if [ -n "$(git status --porcelain -- initramfs/bin/init)" ]; then
+      echo "+ git restore -- initramfs/bin/init"
+      git restore -- initramfs/bin/init
+    fi
+  fi
 }
 
 REMOTE="${MY_OS_REMOTE:-}"
@@ -90,6 +100,8 @@ done
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+restore_generated_files
+
 BRANCH="$(git branch --show-current)"
 if [ -z "$BRANCH" ]; then
   echo "detached HEAD: cannot pull a current branch" >&2
@@ -151,6 +163,8 @@ if [ "$BUILD" -eq 1 ]; then
 else
   echo "build skipped"
 fi
+
+restore_generated_files
 
 if [ -n "$RUN_TARGET" ]; then
   echo "+ make $RUN_TARGET"

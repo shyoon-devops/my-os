@@ -3,8 +3,10 @@
 
 #include "types.h"
 
-#define PAGE_SIZE 4096ULL
-#define MIN_USABLE_ADDR 0x00100000ULL
+enum {
+    PAGE_SIZE = 4096ULL,
+    MIN_USABLE_ADDR = 0x00100000ULL
+};
 
 void pmm_init(u64 mb2_info_addr);
 u64 pmm_alloc_frame(void);

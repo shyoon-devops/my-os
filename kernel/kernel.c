@@ -1,6 +1,7 @@
 #include "command.h"
 #include "console.h"
 #include "device.h"
+#include "fd.h"
 #include "heap.h"
 #include "idt.h"
 #include "irq.h"
@@ -12,6 +13,7 @@
 #include "pit.h"
 #include "pmm.h"
 #include "print.h"
+#include "ramfs.h"
 #include "rtc.h"
 #include "serial.h"
 #include "shell.h"
@@ -19,6 +21,7 @@
 #include "timer.h"
 #include "tty.h"
 #include "types.h"
+#include "vfs.h"
 #include "vmm.h"
 #include "workqueue.h"
 
@@ -103,6 +106,12 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     tty_init();
 
     print("\n");
+    ramfs_init();
+
+    print("\n");
+    fd_init();
+
+    print("\n");
     command_init();
     command_register_builtin_commands();
     device_register_builtin_commands();
@@ -112,6 +121,8 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     timer_register_builtin_commands();
     rtc_register_builtin_commands();
     task_register_builtin_commands();
+    vfs_register_builtin_commands();
+    fd_register_builtin_commands();
 
     print("\n");
     pic_init();

@@ -60,6 +60,9 @@ C_SOURCES= \
     kernel/timer.c \
     kernel/rtc.c \
     kernel/task.c \
+    kernel/vfs.c \
+    kernel/ramfs.c \
+    kernel/fd.c \
     kernel/utils.c
 
 ASM_SOURCES= \
@@ -142,7 +145,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-02] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-04] your message"'; \
 	  exit 1; \
 	fi
 	git add --all

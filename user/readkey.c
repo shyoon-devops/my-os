@@ -69,9 +69,10 @@ u64 readkey_main(void) {
     puts_user("\n");
 
     if (readkey_key >= 0x20 && readkey_key <= 0x7e) {
-        readkey_printable_line[25] = (char)readkey_key;
+        readkey_printable_line[26] = (char)readkey_key;
         user_write(USER_FD_STDOUT, readkey_printable_line, user_strlen(readkey_printable_line));
     }
 
+    user_exit((u64)(readkey_key & 0xff));
     return (u64)(readkey_key & 0xff);
 }

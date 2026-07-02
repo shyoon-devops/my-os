@@ -5,10 +5,6 @@ global syscall_entry
 extern syscall_dispatch
 extern ring3_saved_kernel_rsp
 
-section .bss
-align 8
-syscall_entry_number: resq 1
-
 section .text
 
 ;
@@ -30,11 +26,14 @@ section .text
 syscall_entry:
     cli
 
-    mov [rel syscall_entry_number], rax
-
     ; sysretq에 필요한 값.
     push rcx
     push r11
+
+    ; syscall_dispatch() 호출 뒤에도 원래 syscall number가 필요하다.
+    ; r12는 System V ABI callee-saved register라서 C 함수 호출 뒤에도 유지된다.
+    push r12
+    mov r12, rax
 
     ; syscall_dispatch(number, arg0, arg1, arg2, arg3, arg4, arg5)
     ; C ABI:
@@ -54,9 +53,10 @@ syscall_entry:
 
     ; Phase 10-C/10-E에서는 SYS_exit만 kernel shell 복귀 신호다.
     ; SYS_write 같은 일반 syscall은 sysretq로 userland에 복귀해야 한다.
-    cmp qword [rel syscall_entry_number], 60
+    cmp r12, 60
     je syscall_exit_to_kernel_shell
 
+    pop r12
     pop r11
     pop rcx
 

@@ -11,6 +11,8 @@ static syscall_entry_t syscall_table[SYSCALL_TABLE_SIZE];
 static u32 syscall_count = 0;
 
 static u32 syscall_initialized = 0;
+static u32 user_exit_requested = 0;
+static u64 user_exit_code = 0;
 
 static u64 sys_read(
     u64 arg0,
@@ -106,10 +108,9 @@ static u64 sys_exit(
     (void)arg4;
     (void)arg5;
 
-    /*
-     * 아직 user process가 없으므로 실제 종료는 하지 않는다.
-     * exit code만 반환해서 syscall path 테스트용으로 사용한다.
-     */
+    user_exit_requested = 1;
+    user_exit_code = arg0;
+
     return arg0;
 }
 
@@ -127,6 +128,8 @@ static void syscall_register(u64 number, const char* name, syscall_handler_t han
 
 void syscall_init(void) {
     syscall_count = 0;
+    user_exit_requested = 0;
+    user_exit_code = 0;
 
     syscall_register(SYS_READ, "read", sys_read);
     syscall_register(SYS_WRITE, "write", sys_write);
@@ -171,6 +174,16 @@ u64 syscall_dispatch(
     return SYSCALL_ERR_INVAL;
 }
 
+u64 syscall_take_user_exit_code(void) {
+    if (!user_exit_requested) {
+        return SYSCALL_NO_USER_EXIT;
+    }
+
+    user_exit_requested = 0;
+
+    return user_exit_code;
+}
+
 static void print_syscall_result(u64 value) {
     if (value == SYSCALL_ERR_INVAL) {
         print("ERR_INVAL");
@@ -199,6 +212,14 @@ static void cmd_syscallinfo(const char* args) {
 
     print("syscall count = ");
     print_dec64(syscall_count);
+    print("\n");
+
+    print("user exit requested = ");
+    print_dec64(user_exit_requested);
+    print("\n");
+
+    print("user exit code = ");
+    print_dec64(user_exit_code);
     print("\n");
 
     for (u32 i = 0; i < syscall_count; i++) {
@@ -255,6 +276,10 @@ static void cmd_syscalltest(const char* args) {
 
     print("SYS_exit returned ");
     print_syscall_result(exit_code);
+    print("\n");
+
+    print("SYS_exit take returned ");
+    print_syscall_result(syscall_take_user_exit_code());
     print("\n");
 }
 

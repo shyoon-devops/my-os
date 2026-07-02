@@ -5,6 +5,7 @@
 #include "task.h"
 #include "tty.h"
 #include "types.h"
+#include "vfs.h"
 
 #define SHELL_LINE_MAX 64
 
@@ -188,6 +189,68 @@ static void shell_copy_line(char* dst, const char* src, u32 dst_size) {
     }
 
     dst[i] = '\0';
+}
+
+static void shell_copy_substr(
+    char* dst,
+    const char* src,
+    u32 len,
+    u32 dst_size
+) {
+    if (!dst || dst_size == 0) {
+        return;
+    }
+
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+
+    u32 i = 0;
+
+    while (i < len && i + 1 < dst_size) {
+        dst[i] = src[i];
+        i++;
+    }
+
+    dst[i] = '\0';
+}
+
+static u32 shell_append_char(char* dst, u32* index, u32 dst_size, char c) {
+    if (!dst || !index || dst_size == 0) {
+        return 0;
+    }
+
+    if (*index + 1 >= dst_size) {
+        return 0;
+    }
+
+    dst[*index] = c;
+    *index = *index + 1;
+    dst[*index] = '\0';
+
+    return 1;
+}
+
+static u32 shell_append_string(
+    char* dst,
+    u32* index,
+    u32 dst_size,
+    const char* src
+) {
+    if (!dst || !index || !src || dst_size == 0) {
+        return 0;
+    }
+
+    while (*src) {
+        if (!shell_append_char(dst, index, dst_size, *src)) {
+            return 0;
+        }
+
+        src++;
+    }
+
+    return 1;
 }
 
 static u32 history_physical_index(u32 logical_index) {
@@ -425,7 +488,7 @@ static u32 shell_get_command_prefix(char* out, u32 out_size) {
 
     /*
      * command 이름만 자동완성한다.
-     * 즉 "cat /he<Tab>" 같은 파일 경로 자동완성은 아직 하지 않는다.
+     * 즉 공백이 있으면 command completion 대상이 아니다.
      */
     for (u32 i = 0; i < line_length; i++) {
         if (shell_is_space(line_buffer[i])) {
@@ -532,6 +595,390 @@ static void shell_complete_command(void) {
     shell_print_completion_matches(prefix);
 }
 
+static u32 shell_is_path_command(const char* command) {
+    /*
+     * 현재 VFS path를 받는 명령만 path autocomplete 대상으로 둔다.
+     *
+     * 나중에 open/stat/rm/mkdir 등이 생기면 여기에 추가하거나,
+     * command registry에 "path arg 지원" metadata를 넣는 방식으로 바꿀 수 있다.
+     */
+    return shell_streq(command, "ls") ||
+           shell_streq(command, "cat") ||
+           shell_streq(command, "fdcat");
+}
+
+static u32 shell_extract_command(char* out, u32 out_size) {
+    if (!out || out_size == 0) {
+        return 0;
+    }
+
+    out[0] = '\0';
+
+    if (line_length == 0) {
+        return 0;
+    }
+
+    u32 i = 0;
+
+    while (i < line_length && shell_is_space(line_buffer[i])) {
+        i++;
+    }
+
+    if (i >= line_length) {
+        return 0;
+    }
+
+    u32 out_index = 0;
+
+    while (i < line_length && !shell_is_space(line_buffer[i])) {
+        if (out_index + 1 >= out_size) {
+            break;
+        }
+
+        out[out_index] = line_buffer[i];
+        out_index++;
+        i++;
+    }
+
+    out[out_index] = '\0';
+
+    return out_index > 0;
+}
+
+static u32 shell_find_path_token_start(u32* out_start) {
+    if (!out_start) {
+        return 0;
+    }
+
+    if (cursor_index != line_length) {
+        return 0;
+    }
+
+    u32 i = 0;
+
+    while (i < line_length && shell_is_space(line_buffer[i])) {
+        i++;
+    }
+
+    while (i < line_length && !shell_is_space(line_buffer[i])) {
+        i++;
+    }
+
+    if (i >= line_length) {
+        return 0;
+    }
+
+    while (i < line_length && shell_is_space(line_buffer[i])) {
+        i++;
+    }
+
+    /*
+     * 이번 최소 구현은 첫 번째 인자 하나만 autocomplete한다.
+     * 즉 "cmd arg1 arg2"에서 arg2 자동완성은 아직 하지 않는다.
+     */
+    *out_start = i;
+
+    return 1;
+}
+
+static u32 shell_make_path_context(
+    u32 token_start,
+    char* parent_path,
+    u32 parent_size,
+    char* prefix,
+    u32 prefix_size
+) {
+    if (!parent_path || !prefix || parent_size == 0 || prefix_size == 0) {
+        return 0;
+    }
+
+    parent_path[0] = '\0';
+    prefix[0] = '\0';
+
+    if (token_start > line_length) {
+        return 0;
+    }
+
+    const char* token = &line_buffer[token_start];
+    u32 token_len = line_length - token_start;
+
+    /*
+     * VFS는 현재 absolute path만 지원한다.
+     *
+     * "cat <Tab>"처럼 token이 비어 있으면 root("/") 기준으로 본다.
+     * "cat /h<Tab>"처럼 token이 '/'로 시작해야 경로 자동완성을 한다.
+     */
+    if (token_len == 0) {
+        shell_copy_line(parent_path, "/", parent_size);
+        prefix[0] = '\0';
+        return 1;
+    }
+
+    if (token[0] != '/') {
+        return 0;
+    }
+
+    u32 last_slash = 0;
+
+    for (u32 i = 0; i < token_len; i++) {
+        if (token[i] == '/') {
+            last_slash = i;
+        }
+    }
+
+    if (last_slash == 0) {
+        shell_copy_line(parent_path, "/", parent_size);
+
+        if (token_len > 1) {
+            shell_copy_substr(
+                prefix,
+                token + 1,
+                token_len - 1,
+                prefix_size
+            );
+        } else {
+            prefix[0] = '\0';
+        }
+
+        return 1;
+    }
+
+    shell_copy_substr(parent_path, token, last_slash, parent_size);
+
+    if (last_slash + 1 < token_len) {
+        shell_copy_substr(
+            prefix,
+            token + last_slash + 1,
+            token_len - last_slash - 1,
+            prefix_size
+        );
+    } else {
+        prefix[0] = '\0';
+    }
+
+    return 1;
+}
+
+static u32 shell_build_child_path(
+    const char* parent_path,
+    const char* child_name,
+    char* out,
+    u32 out_size
+) {
+    if (!parent_path || !child_name || !out || out_size == 0) {
+        return 0;
+    }
+
+    u32 index = 0;
+
+    out[0] = '\0';
+
+    if (shell_streq(parent_path, "/")) {
+        if (!shell_append_char(out, &index, out_size, '/')) {
+            return 0;
+        }
+    } else {
+        if (!shell_append_string(out, &index, out_size, parent_path)) {
+            return 0;
+        }
+
+        if (!shell_append_char(out, &index, out_size, '/')) {
+            return 0;
+        }
+    }
+
+    if (!shell_append_string(out, &index, out_size, child_name)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static u32 shell_count_path_matches(
+    vfs_node_t* parent,
+    const char* prefix,
+    vfs_node_t** last_match
+) {
+    if (last_match) {
+        *last_match = 0;
+    }
+
+    if (!parent || parent->type != VFS_NODE_DIR || !prefix) {
+        return 0;
+    }
+
+    u32 count = 0;
+    vfs_node_t* child = parent->first_child;
+
+    while (child) {
+        if (shell_starts_with(child->name, prefix)) {
+            count++;
+
+            if (last_match) {
+                *last_match = child;
+            }
+        }
+
+        child = child->next_sibling;
+    }
+
+    return count;
+}
+
+static void shell_apply_path_completion(
+    u32 token_start,
+    const char* completed_path,
+    vfs_node_t* node
+) {
+    if (!completed_path || !node) {
+        return;
+    }
+
+    char new_line[SHELL_LINE_MAX];
+    u32 index = 0;
+
+    new_line[0] = '\0';
+
+    for (u32 i = 0; i < token_start && i < line_length; i++) {
+        if (!shell_append_char(new_line, &index, sizeof(new_line), line_buffer[i])) {
+            return;
+        }
+    }
+
+    if (!shell_append_string(new_line, &index, sizeof(new_line), completed_path)) {
+        return;
+    }
+
+    if (node->type == VFS_NODE_DIR) {
+        shell_append_char(new_line, &index, sizeof(new_line), '/');
+    } else {
+        shell_append_char(new_line, &index, sizeof(new_line), ' ');
+    }
+
+    shell_replace_line(new_line);
+}
+
+static void shell_print_path_matches(
+    const char* parent_path,
+    const char* prefix
+) {
+    if (!parent_path || !prefix) {
+        return;
+    }
+
+    vfs_node_t* parent = vfs_lookup(parent_path);
+
+    if (!parent || parent->type != VFS_NODE_DIR) {
+        return;
+    }
+
+    char saved[SHELL_LINE_MAX];
+
+    shell_copy_line(saved, line_buffer, sizeof(saved));
+
+    console_put_char('\n');
+
+    vfs_node_t* child = parent->first_child;
+
+    while (child) {
+        if (shell_starts_with(child->name, prefix)) {
+            char path[SHELL_LINE_MAX];
+
+            if (shell_build_child_path(parent_path, child->name, path, sizeof(path))) {
+                print("  ");
+                print(path);
+
+                if (child->type == VFS_NODE_DIR) {
+                    print("/");
+                }
+
+                print("\n");
+            }
+        }
+
+        child = child->next_sibling;
+    }
+
+    shell_reprint_prompt_with_line(saved);
+}
+
+static u32 shell_complete_path(void) {
+    char command[SHELL_LINE_MAX];
+
+    if (!shell_extract_command(command, sizeof(command))) {
+        return 0;
+    }
+
+    if (!shell_is_path_command(command)) {
+        return 0;
+    }
+
+    u32 token_start = 0;
+
+    if (!shell_find_path_token_start(&token_start)) {
+        return 0;
+    }
+
+    char parent_path[SHELL_LINE_MAX];
+    char prefix[SHELL_LINE_MAX];
+
+    if (!shell_make_path_context(
+            token_start,
+            parent_path,
+            sizeof(parent_path),
+            prefix,
+            sizeof(prefix)
+        )) {
+        return 0;
+    }
+
+    vfs_node_t* parent = vfs_lookup(parent_path);
+
+    if (!parent || parent->type != VFS_NODE_DIR) {
+        return 1;
+    }
+
+    vfs_node_t* match = 0;
+    u32 count = shell_count_path_matches(parent, prefix, &match);
+
+    if (count == 0) {
+        return 1;
+    }
+
+    history_reset_view();
+
+    if (count == 1 && match) {
+        char completed_path[SHELL_LINE_MAX];
+
+        if (shell_build_child_path(
+                parent_path,
+                match->name,
+                completed_path,
+                sizeof(completed_path)
+            )) {
+            shell_apply_path_completion(token_start, completed_path, match);
+        }
+
+        return 1;
+    }
+
+    shell_print_path_matches(parent_path, prefix);
+
+    return 1;
+}
+
+static void shell_complete_tab(void) {
+    /*
+     * 공백 뒤에서 path command라면 경로 자동완성을 먼저 시도한다.
+     * 그 외에는 명령어 자동완성으로 처리한다.
+     */
+    if (shell_complete_path()) {
+        return;
+    }
+
+    shell_complete_command();
+}
+
 static void shell_on_char(char c) {
     /*
      * 사용자가 새 문자를 입력하거나 편집하면
@@ -619,14 +1066,14 @@ static void shell_on_key(tty_key_t key) {
 
     if (key == TTY_KEY_PAGE_UP) {
         /*
-         * 다음 단계 Phase 5-C/5-D에서 console scrollback과 연결한다.
+         * 다음 단계 Phase 5-D/5-E에서 console scrollback과 연결한다.
          */
         return;
     }
 
     if (key == TTY_KEY_PAGE_DOWN) {
         /*
-         * 다음 단계 Phase 5-C/5-D에서 console scrollback과 연결한다.
+         * 다음 단계 Phase 5-D/5-E에서 console scrollback과 연결한다.
          */
         return;
     }
@@ -642,7 +1089,7 @@ static void shell_on_key(tty_key_t key) {
     }
 
     if (key == TTY_KEY_TAB) {
-        shell_complete_command();
+        shell_complete_tab();
         return;
     }
 

@@ -2,6 +2,9 @@
 
 typedef unsigned short u16;
 
+static u16 readkey_key;
+static char readkey_printable[1];
+
 __asm__(
 ".global _start\n"
 "_start:\n"
@@ -54,23 +57,23 @@ static void putu_user(u64 value) {
 u64 readkey_main(void) {
     puts_user("/bin/readkey: waiting for one key...\n");
 
-    u16 key = 0;
-    s64 read = user_read(USER_FD_STDIN, &key, sizeof(key));
+    readkey_key = 0;
+    s64 read = user_read(USER_FD_STDIN, &readkey_key, sizeof(readkey_key));
 
     puts_user("/bin/readkey: read bytes = ");
     putu_user((u64)read);
     puts_user("\n");
 
     puts_user("/bin/readkey: key code = ");
-    putu_user((u64)key);
+    putu_user((u64)readkey_key);
     puts_user("\n");
 
-    if (key >= 0x20 && key <= 0x7e) {
-        char c = (char)key;
+    if (readkey_key >= 0x20 && readkey_key <= 0x7e) {
+        readkey_printable[0] = (char)readkey_key;
         puts_user("/bin/readkey: printable = ");
-        user_write(USER_FD_STDOUT, &c, 1);
+        user_write(USER_FD_STDOUT, readkey_printable, sizeof(readkey_printable));
         puts_user("\n");
     }
 
-    return (u64)(key & 0xff);
+    return (u64)(readkey_key & 0xff);
 }

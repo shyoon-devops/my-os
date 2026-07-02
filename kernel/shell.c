@@ -10,12 +10,18 @@
 
 #define SHELL_LINE_MAX 64
 
+#define SHELL_PROMPT "my-os> "
+#define SHELL_PROMPT_LEN 7
+#define SHELL_SCREEN_ROWS 25
+#define SHELL_SCREEN_COLS 80
+
 #define SHELL_HISTORY_SIZE 16
 #define SHELL_HISTORY_LINE_MAX SHELL_LINE_MAX
 
 static char line_buffer[SHELL_LINE_MAX];
 static u32 completion_list_visible = 0;
 static u32 completion_list_rows = 0;
+static u32 completion_base_row = 0;
 
 static u32 line_length = 0;
 static u32 cursor_index = 0;
@@ -124,6 +130,10 @@ static u32 shell_append_char(char* dst, u32* index, u32 dst_size, char c);
 static u32 shell_append_string(char* dst, u32* index, u32 dst_size, const char* src);
 static void shell_replace_line(const char* text);
 
+static void shell_draw_prompt(void) {
+    print(SHELL_PROMPT);
+}
+
 static u32 shell_strlen(const char* s) {
     u32 len = 0;
 
@@ -218,13 +228,46 @@ static u32 shell_common_prefix_advanced(
 }
 
 
+
+static void shell_clear_screen_row_for_completion(u32 row) {
+    if (row >= SHELL_SCREEN_ROWS) {
+        return;
+    }
+
+    console_set_cursor(row, 0);
+
+    for (u32 col = 0; col < SHELL_SCREEN_COLS; col++) {
+        console_put_char(' ');
+    }
+}
+
+static void shell_draw_current_line_at(u32 row) {
+    if (row >= SHELL_SCREEN_ROWS) {
+        row = SHELL_SCREEN_ROWS - 1;
+    }
+
+    shell_clear_screen_row_for_completion(row);
+    console_set_cursor(row, 0);
+
+    shell_draw_prompt();
+    print(line_buffer);
+
+    prompt_row = row;
+    prompt_col = SHELL_PROMPT_LEN;
+    last_rendered_length = line_length;
+
+    console_set_cursor(prompt_row, prompt_col + cursor_index);
+}
+
 static void shell_forget_completion_list(void) {
     completion_list_visible = 0;
     completion_list_rows = 0;
+    completion_base_row = 0;
 }
 
-static void shell_mark_completion_list(u32 rows) {
+static void shell_mark_completion_list(u32 base_row, u32 rows) {
     completion_list_visible = 1;
+    completion_base_row = base_row;
     completion_list_rows = rows;
 }
 
@@ -233,44 +276,25 @@ static void shell_clear_completion_list_if_visible(void) {
         return;
     }
 
-    u32 current_row = console_get_cursor_row();
-    u32 current_col = console_get_cursor_col();
+    /*
+     * completion 출력은 현재 prompt 아래쪽에 생긴 transient UI다.
+     * console_clear()를 쓰면 shell의 prompt_row 상태와 실제 화면이 어긋난다.
+     * 그래서 completion이 사용한 row만 지운 뒤 원래 prompt row를 다시 그린다.
+     */
+    u32 base = completion_base_row;
     u32 rows = completion_list_rows;
 
-    /*
-     * completion 출력 형태:
-     *
-     *   my-os> syscall
-     *
-     *     syscallinfo
-     *     syscalltest
-     *
-     *   my-os> syscall
-     *
-     * cursor는 마지막 prompt line에 있다.
-     * 따라서 위쪽 rows만큼 지우고 현재 prompt line을 다시 그린다.
-     */
-    if (current_row >= rows) {
-        u32 first_clear_row = current_row - rows;
+    for (u32 i = 1; i <= rows; i++) {
+        u32 row = base + i;
 
-        for (u32 row = first_clear_row; row < current_row; row++) {
-            console_clear_row(row);
+        if (row >= SHELL_SCREEN_ROWS) {
+            break;
         }
 
-        console_set_cursor(first_clear_row, 0);
-
-        /*
-         * 지운 영역 위에서 현재 입력 라인을 다시 그린다.
-         */
-        shell_draw_prompt();
-        print(line_buffer);
-
-        current_row = console_get_cursor_row();
-        current_col = console_get_cursor_col();
-        (void)current_row;
-        (void)current_col;
+        shell_clear_screen_row_for_completion(row);
     }
 
+    shell_draw_current_line_at(base);
     shell_forget_completion_list();
 }
 
@@ -497,19 +521,6 @@ static void shell_print_prompt(void) {
     history_reset_view();
 }
 
-static void shell_reprint_prompt_with_line(const char* line) {
-    print_color("my-os> ", COLOR_GREEN_ON_BLACK);
-
-    console_get_cursor(&prompt_row, &prompt_col);
-
-    line_length = 0;
-    cursor_index = 0;
-    last_rendered_length = 0;
-    line_buffer[0] = '\0';
-
-    shell_replace_line(line);
-}
-
 static void shell_cursor_left(void) {
     if (cursor_index == 0) {
         return;
@@ -682,6 +693,7 @@ static void shell_apply_completion(const char* command) {
 
 static void shell_print_completion_matches(const char* prefix) {
     u32 printed = 0;
+    u32 base_row = prompt_row;
 
     print("\n");
 
@@ -703,15 +715,26 @@ static void shell_print_completion_matches(const char* prefix) {
     print(line_buffer);
 
     if (printed > 0) {
+        u32 bottom_row = base_row + printed + 1;
+
+        if (bottom_row >= SHELL_SCREEN_ROWS) {
+            bottom_row = SHELL_SCREEN_ROWS - 1;
+        }
+
+        prompt_row = bottom_row;
+        prompt_col = SHELL_PROMPT_LEN;
+        last_rendered_length = line_length;
+
+        console_set_cursor(prompt_row, prompt_col + cursor_index);
+
         /*
-         * 지워야 하는 row 수:
-         *   빈 줄 1개
-         *   후보 printed개
-         *
-         * 마지막 prompt line은 남겨두고 다시 그릴 것이므로 completion rows에는
-         * 후보 영역만 포함한다.
+         * 지울 row:
+         *   base_row + 1  : 빈 줄 또는 첫 후보 줄
+         *   ...
+         *   base_row + N  : 후보들
+         *   base_row + N+1: 임시 prompt 줄
          */
-        shell_mark_completion_list(printed + 1);
+        shell_mark_completion_list(base_row, printed + 1);
     } else {
         shell_forget_completion_list();
     }
@@ -1058,6 +1081,7 @@ static void shell_print_path_matches(
     }
 
     u32 printed = 0;
+    u32 base_row = prompt_row;
 
     print("\n");
 
@@ -1091,7 +1115,19 @@ static void shell_print_path_matches(
     print(line_buffer);
 
     if (printed > 0) {
-        shell_mark_completion_list(printed + 1);
+        u32 bottom_row = base_row + printed + 1;
+
+        if (bottom_row >= SHELL_SCREEN_ROWS) {
+            bottom_row = SHELL_SCREEN_ROWS - 1;
+        }
+
+        prompt_row = bottom_row;
+        prompt_col = SHELL_PROMPT_LEN;
+        last_rendered_length = line_length;
+
+        console_set_cursor(prompt_row, prompt_col + cursor_index);
+
+        shell_mark_completion_list(base_row, printed + 1);
     } else {
         shell_forget_completion_list();
     }

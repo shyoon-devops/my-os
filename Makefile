@@ -64,6 +64,7 @@ USER_LDFLAGS=-nostdlib \
 
 LDFLAGS=-T linker.ld \
         -nostdlib \
+        -z noexecstack \
         -z max-page-size=0x1000 \
         -m elf_x86_64
 

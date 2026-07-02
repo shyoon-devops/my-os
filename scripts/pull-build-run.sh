@@ -8,6 +8,7 @@ Usage:
 
 Default:
   - pull current branch from the github remote when it exists
+  - sync the pulled branch to configured remotes through make push-remotes
   - build with ./scripts/docker-build-os.sh
   - do not start QEMU unless a run option is specified
 
@@ -15,18 +16,13 @@ Options:
   --remote <name>       Git remote to pull from. Default: github if present, otherwise origin
   --clean               Run clean build: ./scripts/docker-build-os.sh clean
   --no-build            Pull only, skip build
+  --no-sync-remotes     Do not run make push-remotes after pulling
   --run                 Run: make run
   --run-cocoa           Run: make run-cocoa
   --run-curses          Run: make run-curses
   --run-cocoa-serial    Run: make run-cocoa-serial
   --allow-dirty         Allow local uncommitted changes before pulling
   -h, --help            Show this help
-
-Examples:
-  bash scripts/pull-build-run.sh
-  bash scripts/pull-build-run.sh --run-cocoa
-  bash scripts/pull-build-run.sh --clean --run-cocoa
-  bash scripts/pull-build-run.sh --remote github --run-cocoa-serial
 USAGE
 }
 
@@ -34,6 +30,7 @@ REMOTE="${MY_OS_REMOTE:-}"
 CLEAN=0
 BUILD=1
 ALLOW_DIRTY=0
+SYNC_REMOTES=1
 RUN_TARGET=""
 
 while [ "$#" -gt 0 ]; do
@@ -52,6 +49,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-build)
       BUILD=0
+      shift
+      ;;
+    --no-sync-remotes)
+      SYNC_REMOTES=0
       shift
       ;;
     --run)
@@ -131,6 +132,13 @@ git fetch "$REMOTE" "$BRANCH"
 
 echo "+ git pull --ff-only $REMOTE $BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
+
+if [ "$SYNC_REMOTES" -eq 1 ]; then
+  echo "+ make push-remotes"
+  make push-remotes
+else
+  echo "remote sync skipped"
+fi
 
 if [ "$BUILD" -eq 1 ]; then
   if [ "$CLEAN" -eq 1 ]; then

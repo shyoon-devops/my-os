@@ -40,10 +40,19 @@ syscall_entry:
     mov rsi, rdi
     mov rdi, rax
 
+    cmp qword [rel syscall_number], 0
+    je syscall_call_dispatch_irq_on
+
+syscall_call_dispatch_irq_off:
+    call syscall_dispatch
+    jmp syscall_after_dispatch
+
+syscall_call_dispatch_irq_on:
     sti
     call syscall_dispatch
     cli
 
+syscall_after_dispatch:
     add rsp, 8
 
     cmp qword [rel syscall_number], 60

@@ -97,12 +97,14 @@ C_SOURCES= \
     kernel/initramfs.c \
     kernel/elf.c \
     kernel/syscall.c \
+    kernel/syscall_cpu.c \
     kernel/fd.c \
     kernel/utils.c
 
 ASM_SOURCES= \
     kernel/interrupt.asm \
-    kernel/task_switch.asm
+    kernel/task_switch.asm \
+    kernel/syscall_entry.asm
 
 BOOT_OBJECT=$(BUILD_DIR)/boot.o
 C_OBJECTS=$(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))

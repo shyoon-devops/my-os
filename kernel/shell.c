@@ -100,6 +100,8 @@ static const char* shell_completion_commands[] = {
 
     "history",
     "syscalltest",
+    "syscallentrytest",
+    "syscallcpuinfo",
     "syscallinfo",
     "mouseinfo",
     "initramfsinfo",

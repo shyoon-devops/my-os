@@ -636,14 +636,10 @@ static void shell_print_completion_matches(const char* prefix) {
     }
 
     shell_draw_prompt();
+    console_get_cursor(&prompt_row, &prompt_col);
+
     print(line_buffer);
 
-    /*
-     * 후보 출력은 일반 출력으로 남긴다.
-     * transient erase는 console overlay API를 만든 뒤 다시 넣는다.
-     */
-    console_get_cursor(&prompt_row, &prompt_col);
-    prompt_col = SHELL_PROMPT_LEN;
     last_rendered_length = line_length;
 }
 
@@ -1015,14 +1011,10 @@ static void shell_print_path_matches(
     }
 
     shell_draw_prompt();
+    console_get_cursor(&prompt_row, &prompt_col);
+
     print(line_buffer);
 
-    /*
-     * 후보 출력은 일반 출력으로 남긴다.
-     * transient erase는 console overlay API를 만든 뒤 다시 넣는다.
-     */
-    console_get_cursor(&prompt_row, &prompt_col);
-    prompt_col = SHELL_PROMPT_LEN;
     last_rendered_length = line_length;
 }
 

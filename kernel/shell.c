@@ -100,7 +100,10 @@ static const char* shell_completion_commands[] = {
 
     "history",
     "mouseinfo",
-    "initramfsinfo"
+    "initramfsinfo",
+    "elflast",
+    "elfload",
+    "elfinfo"
 };
 
 #define SHELL_COMPLETION_COUNT \

@@ -6,12 +6,15 @@ QEMU=qemu-system-x86_64
 BUILD_DIR=build
 ISO_DIR=$(BUILD_DIR)/iso
 INITRAMFS_DIR=initramfs
+USER_DIR=user
 
 KERNEL=$(BUILD_DIR)/kernel.elf
 ISO=$(BUILD_DIR)/my-os.iso
 
 INITRAMFS_TAR=$(BUILD_DIR)/initramfs.tar
 INITRAMFS_OBJECT=$(BUILD_DIR)/initramfs.o
+USER_INIT_ELF=$(INITRAMFS_DIR)/bin/init
+
 INITRAMFS_FILES=$(shell find $(INITRAMFS_DIR) -type f 2>/dev/null)
 
 GIT_MSG?=
@@ -33,6 +36,29 @@ CFLAGS=-std=gnu11 \
        -Wextra \
        -O2 \
        -Iinclude
+
+USER_CFLAGS=-std=gnu11 \
+            -ffreestanding \
+            -fno-builtin \
+            -fno-stack-protector \
+            -fno-pic \
+            -fno-pie \
+            -fno-asynchronous-unwind-tables \
+            -fno-unwind-tables \
+            -m64 \
+            -mno-red-zone \
+            -mno-mmx \
+            -mno-sse \
+            -mno-sse2 \
+            -Wall \
+            -Wextra \
+            -O2
+
+USER_LDFLAGS=-nostdlib \
+             -static \
+             -no-pie \
+             -Wl,-T,$(USER_DIR)/linker.ld \
+             -Wl,--build-id=none
 
 LDFLAGS=-T linker.ld \
         -nostdlib \
@@ -69,6 +95,7 @@ C_SOURCES= \
     kernel/vfs.c \
     kernel/ramfs.c \
     kernel/initramfs.c \
+    kernel/elf.c \
     kernel/fd.c \
     kernel/utils.c
 
@@ -89,7 +116,24 @@ QEMU_COMMON=-cdrom $(ISO) \
 
 all: $(ISO)
 
-$(INITRAMFS_TAR): $(INITRAMFS_FILES)
+prepare-initramfs:
+	mkdir -p $(INITRAMFS_DIR)/bin
+	mkdir -p $(INITRAMFS_DIR)/etc
+	@if [ ! -f $(INITRAMFS_DIR)/hello.txt ]; then \
+	  printf 'hello from my-os initramfs\n' > $(INITRAMFS_DIR)/hello.txt; \
+	fi
+	@if [ ! -f $(INITRAMFS_DIR)/etc/motd ]; then \
+	  printf 'welcome to my-os\nthis file was loaded from initramfs\n' > $(INITRAMFS_DIR)/etc/motd; \
+	fi
+	@if [ ! -f $(INITRAMFS_DIR)/bin/README ]; then \
+	  printf 'This directory will later contain userland ELF binaries.\nFor now it is loaded from initramfs.\n' > $(INITRAMFS_DIR)/bin/README; \
+	fi
+
+$(USER_INIT_ELF): $(USER_DIR)/init.c $(USER_DIR)/linker.ld | prepare-initramfs
+	mkdir -p $(@D)
+	$(CC) $(USER_CFLAGS) $(USER_LDFLAGS) -o $@ $(USER_DIR)/init.c
+
+$(INITRAMFS_TAR): prepare-initramfs $(USER_INIT_ELF) $(INITRAMFS_FILES)
 	mkdir -p $(@D)
 	tar --format=ustar -cf $(INITRAMFS_TAR) -C $(INITRAMFS_DIR) .
 
@@ -160,7 +204,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-07] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-08] your message"'; \
 	  exit 1; \
 	fi
 	git add --all
@@ -169,7 +213,8 @@ commit:
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -f $(USER_INIT_ELF)
 	rm -rf iso
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 
-.PHONY: all check run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean
+.PHONY: all prepare-initramfs check run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean

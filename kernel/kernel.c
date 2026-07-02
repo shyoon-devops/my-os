@@ -1,6 +1,7 @@
 #include "command.h"
 #include "console.h"
 #include "device.h"
+#include "elf.h"
 #include "fd.h"
 #include "heap.h"
 #include "idt.h"
@@ -145,6 +146,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     fd_register_builtin_commands();
     mouse_register_builtin_commands();
     initramfs_register_builtin_commands();
+    elf_register_builtin_commands();
 
     print("\n");
     pic_init();

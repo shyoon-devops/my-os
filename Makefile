@@ -226,15 +226,6 @@ rename:
 git-status:
 	git status --short
 
-commit:
-	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-10a] your message"'; \
-	  exit 1; \
-	fi
-	git add --all
-	git commit -m "$(GIT_MSG)"
-	git push
-
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(USER_INIT_ELF)
@@ -242,3 +233,34 @@ clean:
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 
 .PHONY: all check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean
+
+.PHONY: commit push-remotes
+
+commit:
+	@if [ -z "$(GIT_MSG)" ]; then \
+		echo "Usage: make commit GIT_MSG=\"commit message\""; \
+		exit 1; \
+	fi
+	@git add -A
+	@if git diff --cached --quiet; then \
+		echo "nothing to commit"; \
+	else \
+		git commit -m "$(GIT_MSG)"; \
+	fi
+	@$(MAKE) push-remotes
+
+push-remotes:
+	@branch="$$(git branch --show-current)"; \
+	if [ -z "$$branch" ]; then \
+		echo "detached HEAD: cannot push current branch"; \
+		exit 1; \
+	fi; \
+	remotes="$$(git remote)"; \
+	if [ -z "$$remotes" ]; then \
+		echo "no git remotes configured"; \
+		exit 1; \
+	fi; \
+	for remote in $$remotes; do \
+		echo "pushing $$branch to $$remote"; \
+		git push "$$remote" "$$branch"; \
+	done

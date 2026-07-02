@@ -5,6 +5,13 @@ global syscall_entry
 extern syscall_dispatch
 extern ring3_saved_kernel_rsp
 
+section .bss
+align 8
+syscall_user_rsp:    resq 1
+syscall_user_rip:    resq 1
+syscall_user_rflags: resq 1
+syscall_number:      resq 1
+
 section .text
 
 ;
@@ -27,23 +34,23 @@ section .text
 syscall_entry:
     cli
 
-    ; syscall 진입 직후 rcx/r11에 들어 있는 user return state를 보존한다.
-    push rcx
-    push r11
+    ; SYSCALL은 x86_64에서 RSP를 자동으로 kernel stack으로 바꾸지 않는다.
+    ; 따라서 user stack 위에서 C handler나 scheduler를 실행하면 user stack이 깨진다.
+    ; 진입 직후 user return state를 저장하고, ring3_enter()가 저장해 둔
+    ; 현재 task의 kernel stack으로 전환한 뒤 dispatch한다.
+    mov [rel syscall_user_rsp], rsp
+    mov [rel syscall_user_rip], rcx
+    mov [rel syscall_user_rflags], r11
+    mov [rel syscall_number], rax
 
-    ; Phase 10-C/10-E에서는 SYS_exit만 kernel shell 복귀 신호다.
-    ; 일반 syscall은 dispatch 후 iretq로 userland에 복귀한다.
-    cmp rax, 60
-    je syscall_dispatch_exit
+    mov rsp, [rel ring3_saved_kernel_rsp]
 
-syscall_dispatch_return_user:
     ; syscall_dispatch(number, arg0, arg1, arg2, arg3, arg4, arg5)
     ; C ABI:
     ;   rdi, rsi, rdx, rcx, r8, r9, stack
     ;
-    ; rcx/r11 push 이후 rsp는 16-byte aligned 상태다.
-    ; 7번째 인자 push 전에 padding 8 byte를 넣어 call alignment를 맞춘다.
-    sub rsp, 8
+    ; ring3_saved_kernel_rsp는 normal C call 진입 직후의 stack pointer라
+    ; 8-byte misaligned 상태다. arg5 push 뒤 call alignment가 맞는다.
     push r9
 
     mov r9, r8
@@ -54,22 +61,21 @@ syscall_dispatch_return_user:
     mov rdi, rax
 
     ; SYS_read 같은 blocking syscall은 keyboard IRQ가 들어와야 깨어난다.
-    ; syscall_entry가 cli 상태로 dispatch하면 wait queue가 IRQ disabled 상태로
-    ; 잠들 수 있으므로, C syscall handler 실행 중에는 IRQ를 다시 켠다.
+    ; C syscall handler 실행 중에는 IRQ를 켠다.
     sti
     call syscall_dispatch
     cli
 
-    add rsp, 16
+    add rsp, 8
 
-    ; saved user state 복원.
-    pop r11
-    pop rcx
+    cmp qword [rel syscall_number], 60
+    je syscall_exit_to_kernel_shell
 
-    ; SYSRET 대신 IRETQ를 사용한다.
-    ; 현재 toy kernel은 ring3 진입도 iretq 기반이고, 이 경로가 selector/STAR
-    ; 의존성을 제거해서 Phase 10-E 디버깅 범위를 줄인다.
-    mov rdx, rsp
+    ; 일반 syscall은 저장해 둔 user state로 iretq 복귀한다.
+    mov rdx, [rel syscall_user_rsp]
+    mov r11, [rel syscall_user_rflags]
+    mov rcx, [rel syscall_user_rip]
+
     push qword 0x23
     push rdx
     push r11
@@ -77,26 +83,9 @@ syscall_dispatch_return_user:
     push rcx
     iretq
 
-syscall_dispatch_exit:
-    sub rsp, 8
-    push r9
-
-    mov r9, r8
-    mov r8, r10
-    mov rcx, rdx
-    mov rdx, rsi
-    mov rsi, rdi
-    mov rdi, rax
-
-    sti
-    call syscall_dispatch
-    cli
-
-    add rsp, 16
-
-    ; 현재 rsp는 ring3 user stack이다.
-    ; ring3_enter()가 저장해둔 kernel stack으로 돌아간다.
+syscall_exit_to_kernel_shell:
     ; rax에는 syscall_dispatch(SYS_exit)의 반환값, 즉 exit code가 있다.
+    ; ring3_enter()의 원래 kernel stack으로 돌아가 ret한다.
     mov rsp, [rel ring3_saved_kernel_rsp]
 
     mov dx, 0x10

@@ -9,9 +9,8 @@ Usage:
 Default:
   - pull current branch from the github remote when it exists
   - sync the pulled branch to configured remotes through make push-remotes
-  - apply small local build overlays that avoid rewriting large source files
   - build with ./scripts/docker-build-os.sh
-  - restore tracked generated/local overlay files after build so the next run starts clean
+  - restore tracked generated init ELF after build so the next run starts clean
   - do not start QEMU unless a run option is specified
 
 Options:
@@ -28,58 +27,12 @@ Options:
 USAGE
 }
 
-SHELL_COMPLETION_OVERLAY_APPLIED=0
-
 restore_generated_files() {
   if git ls-files --error-unmatch initramfs/bin/init >/dev/null 2>&1; then
     if [ -n "$(git status --porcelain -- initramfs/bin/init)" ]; then
       echo "+ git restore -- initramfs/bin/init"
       git restore -- initramfs/bin/init
     fi
-  fi
-}
-
-apply_local_build_overlays() {
-  if [ ! -f kernel/shell.c ]; then
-    return
-  fi
-
-  if grep -q '"initrun"' kernel/shell.c; then
-    return
-  fi
-
-  echo "+ apply local shell completion overlay"
-
-  python3 - <<'PY'
-from pathlib import Path
-
-p = Path("kernel/shell.c")
-text = p.read_text()
-
-old_commands = '    "elflast",\n    "elfload",\n    "elfinfo"\n};'
-new_commands = '    "elflast",\n    "elfload",\n    "elfinfo",\n    "initrun"\n};'
-
-if old_commands not in text:
-    raise SystemExit("shell completion list anchor not found")
-
-text = text.replace(old_commands, new_commands, 1)
-
-old_path_cmd = '           shell_streq(command, "elfload");'
-new_path_cmd = '           shell_streq(command, "elfload") ||\n           shell_streq(command, "initrun");'
-
-if old_path_cmd in text:
-    text = text.replace(old_path_cmd, new_path_cmd, 1)
-
-p.write_text(text)
-PY
-
-  SHELL_COMPLETION_OVERLAY_APPLIED=1
-}
-
-restore_local_build_overlays() {
-  if [ "$SHELL_COMPLETION_OVERLAY_APPLIED" -eq 1 ]; then
-    echo "+ git restore -- kernel/shell.c"
-    git restore -- kernel/shell.c
   fi
 }
 
@@ -199,8 +152,6 @@ else
   echo "remote sync skipped"
 fi
 
-apply_local_build_overlays
-
 if [ "$BUILD" -eq 1 ]; then
   if [ "$CLEAN" -eq 1 ]; then
     echo "+ ./scripts/docker-build-os.sh clean"
@@ -213,7 +164,6 @@ else
   echo "build skipped"
 fi
 
-restore_local_build_overlays
 restore_generated_files
 
 if [ -n "$RUN_TARGET" ]; then

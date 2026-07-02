@@ -27,6 +27,7 @@
 #include "timer.h"
 #include "tty.h"
 #include "types.h"
+#include "user_mode.h"
 #include "vfs.h"
 #include "vmm.h"
 #include "workqueue.h"
@@ -145,6 +146,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     syscall_cpu_init();
 
     print("\n");
+    user_mode_init();
+
+    print("\n");
     command_init();
     command_register_builtin_commands();
     device_register_builtin_commands();
@@ -162,6 +166,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     syscall_register_builtin_commands();
     syscall_cpu_register_builtin_commands();
     gdt_register_builtin_commands();
+    user_mode_register_builtin_commands();
 
     print("\n");
     pic_init();

@@ -103,6 +103,8 @@ static const char* shell_completion_commands[] = {
     "syscallentrytest",
     "syscallcpuinfo",
     "gdtinfo",
+    "ring3test",
+    "ring3info",
     "syscallinfo",
     "mouseinfo",
     "initramfsinfo",
@@ -687,6 +689,15 @@ static void shell_complete_command(void) {
 
     if (common_initialized && shell_common_prefix_advanced(prefix, common)) {
         shell_replace_line(common);
+
+        /*
+         * UX:
+         *   sys<Tab> 입력 시 syscall 까지 공통 prefix를 채우고,
+         *   동시에 syscall* 후보를 보여준다.
+         *
+         * 그래야 사용자가 syscall 자체가 완성 명령어라고 착각하지 않는다.
+         */
+        shell_print_completion_matches(common);
         return;
     }
 
@@ -1100,6 +1111,13 @@ static u32 shell_complete_path(void) {
                 sizeof(completed_path)
             )) {
             shell_replace_path_token_prefix(token_start, completed_path);
+
+            /*
+             * UX:
+             *   경로도 공통 prefix를 채운 뒤 후보가 여전히 여러 개면
+             *   그 후보 목록을 바로 보여준다.
+             */
+            shell_print_path_matches(parent_path, common_name);
         }
 
         return 1;

@@ -3,15 +3,14 @@ bits 64
 global syscall_entry
 
 extern syscall_dispatch
+extern ring3_saved_kernel_rsp
 
 section .text
 
 ;
 ; syscall_entry
 ;
-; CPU가 syscall instruction으로 들어올 때 도착할 entry point.
-;
-; x86_64 syscall 진입 시 일반적으로:
+; x86_64 syscall ABI:
 ;   rax = syscall number
 ;   rdi = arg0
 ;   rsi = arg1
@@ -20,36 +19,31 @@ section .text
 ;   r8  = arg4
 ;   r9  = arg5
 ;
+; CPU on syscall:
 ;   rcx = user return RIP
 ;   r11 = user RFLAGS
-;
-; 주의:
-;   syscall은 자동으로 kernel stack으로 바꿔주지 않는다.
-;   그래서 이 stub은 Phase 10 전에는 실제 user mode에서 호출하지 않는다.
-;
-; 지금 Phase 9-B의 목적:
-;   - LSTAR에 걸 수 있는 entry symbol을 만든다.
-;   - syscall_dispatch() 호출 ABI를 준비한다.
 ;
 syscall_entry:
     cli
 
     ;
-    ; sysretq에 필요하므로 user RIP/RFLAGS를 보존한다.
+    ; sysretq에 필요한 값.
     ;
     push rcx
     push r11
 
     ;
+    ; SYS_exit 감지를 위해 원래 syscall number 보존.
+    ;
+    push rax
+
+    ;
     ; syscall_dispatch(number, arg0, arg1, arg2, arg3, arg4, arg5)
     ;
-    ; System V AMD64 C ABI:
-    ;   rdi, rsi, rdx, rcx, r8, r9, stack...
+    ; C ABI:
+    ;   rdi, rsi, rdx, rcx, r8, r9, stack
     ;
-    ; syscall ABI:
-    ;   rax, rdi, rsi, rdx, r10, r8, r9
-    ;
-    push r9          ; arg5: 7번째 C 인자, stack 전달
+    push r9          ; arg5, 7번째 C 인자
 
     mov r9, r8       ; arg4
     mov r8, r10      ; arg3
@@ -60,13 +54,42 @@ syscall_entry:
 
     call syscall_dispatch
 
-    add rsp, 8       ; pushed arg5 제거
+    add rsp, 8       ; arg5 제거
+
+    pop r10          ; original syscall number
+
+    ;
+    ; SYS_exit = 60
+    ;
+    ; Phase 10-C smoke test에서는 SYS_exit을 process 종료 대신
+    ; kernel shell 복귀 신호로 사용한다.
+    ;
+    cmp r10, 60
+    je .return_to_kernel_shell
 
     pop r11
     pop rcx
 
-    ;
-    ; Phase 10에서 user GDT selector, user RIP, user RFLAGS가 준비되면
-    ; 여기서 ring3로 복귀한다.
-    ;
     sysretq
+
+.return_to_kernel_shell:
+    ;
+    ; 현재 rsp는 ring3 user stack이다.
+    ; ring3_enter()가 저장해둔 kernel stack으로 돌아간다.
+    ;
+    mov rsp, [rel ring3_saved_kernel_rsp]
+
+    mov bx, 0x10
+    mov ds, bx
+    mov es, bx
+    mov fs, bx
+    mov gs, bx
+    mov ss, bx
+
+    sti
+
+    ;
+    ; rax에는 syscall_dispatch(SYS_exit)의 반환값,
+    ; 즉 exit code가 들어 있다.
+    ;
+    ret

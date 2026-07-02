@@ -103,13 +103,15 @@ C_SOURCES= \
     kernel/utils.c
 
 ARCH_C_SOURCES= \
-    $(ARCH_DIR)/gdt.c
+    $(ARCH_DIR)/gdt.c \
+    $(ARCH_DIR)/user_mode.c
 
 ASM_SOURCES= \
     $(ARCH_DIR)/interrupt.asm \
     $(ARCH_DIR)/task_switch.asm \
     $(ARCH_DIR)/syscall_entry.asm \
-    $(ARCH_DIR)/gdt_load.asm
+    $(ARCH_DIR)/gdt_load.asm \
+    $(ARCH_DIR)/ring3_switch.asm
 
 BOOT_SOURCE=$(ARCH_DIR)/boot.asm
 BOOT_OBJECT=$(BUILD_DIR)/$(ARCH_DIR)/boot.o

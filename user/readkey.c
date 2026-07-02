@@ -3,7 +3,7 @@
 typedef unsigned short u16;
 
 static u16 readkey_key;
-static char readkey_printable[1];
+static char readkey_printable_line[] = "/bin/readkey: printable = ?\n";
 
 __asm__(
 ".global _start\n"
@@ -69,10 +69,8 @@ u64 readkey_main(void) {
     puts_user("\n");
 
     if (readkey_key >= 0x20 && readkey_key <= 0x7e) {
-        readkey_printable[0] = (char)readkey_key;
-        puts_user("/bin/readkey: printable = ");
-        user_write(USER_FD_STDOUT, readkey_printable, sizeof(readkey_printable));
-        puts_user("\n");
+        readkey_printable_line[25] = (char)readkey_key;
+        user_write(USER_FD_STDOUT, readkey_printable_line, user_strlen(readkey_printable_line));
     }
 
     return (u64)(readkey_key & 0xff);

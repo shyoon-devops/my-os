@@ -16,7 +16,7 @@ INITRAMFS_TAR=$(BUILD_DIR)/initramfs.tar
 INITRAMFS_OBJECT=$(BUILD_DIR)/initramfs.o
 INITRAMFS_STAMP=$(BUILD_DIR)/.initramfs-prepared
 
-USER_PROGRAMS=init hello
+USER_PROGRAMS=init hello readkey
 USER_ELFS=$(addprefix $(INITRAMFS_DIR)/bin/,$(USER_PROGRAMS))
 
 INITRAMFS_FILES=$(shell find $(INITRAMFS_DIR) -type f 2>/dev/null)

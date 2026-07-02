@@ -1,5 +1,10 @@
 ENTRY(_start)
 
+PHDRS
+{
+    user PT_LOAD FLAGS(7);
+}
+
 SECTIONS
 {
     . = 0x50000000;
@@ -11,5 +16,14 @@ SECTIONS
         *(.data*)
         *(COMMON)
         *(.bss*)
+    } :user
+
+    /DISCARD/ :
+    {
+        *(.comment*)
+        *(.note*)
+        *(.eh_frame*)
+        *(.rela*)
+        *(.rel*)
     }
 }

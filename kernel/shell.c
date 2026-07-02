@@ -40,6 +40,68 @@ static s32 history_view = -1;
 static char history_draft[SHELL_HISTORY_LINE_MAX];
 static u32 history_draft_valid = 0;
 
+/*
+ * Phase 5-B:
+ *   최소 명령어 자동완성 후보 목록.
+ *
+ * 지금은 shell 내부 static list로 시작한다.
+ * 나중에 command registry에서 등록된 명령어를 순회하는 API를 만들면
+ * 이 목록은 제거할 수 있다.
+ */
+static const char* shell_completion_commands[] = {
+    "help",
+    "clear",
+    "ticks",
+    "mem",
+    "echo",
+
+    "pmmtest",
+    "vmmtest",
+    "heaptest",
+    "pf",
+
+    "cmds",
+
+    "devices",
+    "devcount",
+
+    "dmesg",
+    "dmesgclear",
+    "dmesginfo",
+
+    "panic",
+    "asserttest",
+
+    "wqtest",
+    "wqstats",
+    "wqrun",
+
+    "delaytest",
+    "timerstats",
+
+    "date",
+    "rtctest",
+
+    "tasks",
+    "taskdemo",
+    "sleepdemo",
+    "yield",
+    "taskstats",
+
+    "ls",
+    "cat",
+    "fsinfo",
+
+    "fdinfo",
+    "fdcat",
+    "fdwrite",
+
+    "history"
+};
+
+#define SHELL_COMPLETION_COUNT \
+    (sizeof(shell_completion_commands) / sizeof(shell_completion_commands[0]))
+
 static u32 shell_strlen(const char* s) {
     u32 len = 0;
 
@@ -89,6 +151,23 @@ static u32 shell_streq(const char* a, const char* b) {
     }
 
     return *a == '\0' && *b == '\0';
+}
+
+static u32 shell_starts_with(const char* s, const char* prefix) {
+    if (!s || !prefix) {
+        return 0;
+    }
+
+    while (*prefix) {
+        if (*s != *prefix) {
+            return 0;
+        }
+
+        s++;
+        prefix++;
+    }
+
+    return 1;
 }
 
 static void shell_copy_line(char* dst, const char* src, u32 dst_size) {
@@ -226,6 +305,19 @@ static void shell_print_prompt(void) {
     history_reset_view();
 }
 
+static void shell_reprint_prompt_with_line(const char* line) {
+    print_color("my-os> ", COLOR_GREEN_ON_BLACK);
+
+    console_get_cursor(&prompt_row, &prompt_col);
+
+    line_length = 0;
+    cursor_index = 0;
+    last_rendered_length = 0;
+    line_buffer[0] = '\0';
+
+    shell_replace_line(line);
+}
+
 static void shell_cursor_left(void) {
     if (cursor_index == 0) {
         return;
@@ -315,6 +407,131 @@ static void shell_history_down(void) {
     history_draft_valid = 0;
 }
 
+static u32 shell_get_command_prefix(char* out, u32 out_size) {
+    if (!out || out_size == 0) {
+        return 0;
+    }
+
+    out[0] = '\0';
+
+    /*
+     * 이번 최소 구현에서는 cursor가 줄 끝에 있을 때만 자동완성한다.
+     * 중간 커서 위치에서 완성하면 line editor 처리가 복잡해지므로
+     * 나중 단계로 미룬다.
+     */
+    if (cursor_index != line_length) {
+        return 0;
+    }
+
+    /*
+     * command 이름만 자동완성한다.
+     * 즉 "cat /he<Tab>" 같은 파일 경로 자동완성은 아직 하지 않는다.
+     */
+    for (u32 i = 0; i < line_length; i++) {
+        if (shell_is_space(line_buffer[i])) {
+            return 0;
+        }
+    }
+
+    u32 i = 0;
+
+    while (i < line_length && i + 1 < out_size) {
+        out[i] = line_buffer[i];
+        i++;
+    }
+
+    out[i] = '\0';
+
+    return 1;
+}
+
+static u32 shell_count_completion_matches(
+    const char* prefix,
+    const char** last_match
+) {
+    u32 count = 0;
+
+    if (last_match) {
+        *last_match = 0;
+    }
+
+    for (u32 i = 0; i < SHELL_COMPLETION_COUNT; i++) {
+        const char* candidate = shell_completion_commands[i];
+
+        if (shell_starts_with(candidate, prefix)) {
+            count++;
+
+            if (last_match) {
+                *last_match = candidate;
+            }
+        }
+    }
+
+    return count;
+}
+
+static void shell_apply_completion(const char* command) {
+    char completed[SHELL_LINE_MAX];
+
+    shell_copy_line(completed, command, sizeof(completed));
+
+    u32 len = shell_strlen(completed);
+
+    /*
+     * 명령어가 완성되면 뒤에 공백 하나를 붙여서 바로 인자를 칠 수 있게 한다.
+     */
+    if (len + 1 < SHELL_LINE_MAX) {
+        completed[len] = ' ';
+        completed[len + 1] = '\0';
+    }
+
+    shell_replace_line(completed);
+}
+
+static void shell_print_completion_matches(const char* prefix) {
+    char saved[SHELL_LINE_MAX];
+
+    shell_copy_line(saved, line_buffer, sizeof(saved));
+
+    console_put_char('\n');
+
+    for (u32 i = 0; i < SHELL_COMPLETION_COUNT; i++) {
+        const char* candidate = shell_completion_commands[i];
+
+        if (shell_starts_with(candidate, prefix)) {
+            print("  ");
+            print(candidate);
+            print("\n");
+        }
+    }
+
+    shell_reprint_prompt_with_line(saved);
+}
+
+static void shell_complete_command(void) {
+    char prefix[SHELL_LINE_MAX];
+
+    if (!shell_get_command_prefix(prefix, sizeof(prefix))) {
+        return;
+    }
+
+    const char* match = 0;
+    u32 count = shell_count_completion_matches(prefix, &match);
+
+    if (count == 0) {
+        return;
+    }
+
+    history_reset_view();
+
+    if (count == 1 && match) {
+        shell_apply_completion(match);
+        return;
+    }
+
+    shell_print_completion_matches(prefix);
+}
+
 static void shell_on_char(char c) {
     /*
      * 사용자가 새 문자를 입력하거나 편집하면
@@ -402,14 +619,14 @@ static void shell_on_key(tty_key_t key) {
 
     if (key == TTY_KEY_PAGE_UP) {
         /*
-         * 다음 단계 Phase 5-B/5-C에서 console scrollback과 연결한다.
+         * 다음 단계 Phase 5-C/5-D에서 console scrollback과 연결한다.
          */
         return;
     }
 
     if (key == TTY_KEY_PAGE_DOWN) {
         /*
-         * 다음 단계 Phase 5-B/5-C에서 console scrollback과 연결한다.
+         * 다음 단계 Phase 5-C/5-D에서 console scrollback과 연결한다.
          */
         return;
     }
@@ -425,10 +642,7 @@ static void shell_on_key(tty_key_t key) {
     }
 
     if (key == TTY_KEY_TAB) {
-        shell_on_char(' ');
-        shell_on_char(' ');
-        shell_on_char(' ');
-        shell_on_char(' ');
+        shell_complete_command();
         return;
     }
 

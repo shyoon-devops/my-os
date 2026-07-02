@@ -114,6 +114,10 @@ static const char* shell_completion_commands[] = {
 #define SHELL_COMPLETION_COUNT \
     (sizeof(shell_completion_commands) / sizeof(shell_completion_commands[0]))
 
+static u32 shell_append_char(char* dst, u32* index, u32 dst_size, char c);
+static u32 shell_append_string(char* dst, u32* index, u32 dst_size, const char* src);
+static void shell_replace_line(const char* text);
+
 static u32 shell_strlen(const char* s) {
     u32 len = 0;
 

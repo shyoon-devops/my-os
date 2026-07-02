@@ -14,14 +14,12 @@
 #define SHELL_PROMPT_LEN 7
 #define SHELL_SCREEN_ROWS 25
 #define SHELL_SCREEN_COLS 80
+#define SHELL_COMPLETION_MAX_PRINT 16
 
 #define SHELL_HISTORY_SIZE 16
 #define SHELL_HISTORY_LINE_MAX SHELL_LINE_MAX
 
 static char line_buffer[SHELL_LINE_MAX];
-static u32 completion_list_visible = 0;
-static u32 completion_list_rows = 0;
-static u32 completion_base_row = 0;
 
 static u32 line_length = 0;
 static u32 cursor_index = 0;
@@ -131,7 +129,7 @@ static u32 shell_append_string(char* dst, u32* index, u32 dst_size, const char* 
 static void shell_replace_line(const char* text);
 
 static void shell_draw_prompt(void) {
-    print(SHELL_PROMPT);
+    print_color(SHELL_PROMPT, COLOR_GREEN_ON_BLACK);
 }
 
 static u32 shell_strlen(const char* s) {
@@ -228,75 +226,6 @@ static u32 shell_common_prefix_advanced(
 }
 
 
-
-static void shell_clear_screen_row_for_completion(u32 row) {
-    if (row >= SHELL_SCREEN_ROWS) {
-        return;
-    }
-
-    console_set_cursor(row, 0);
-
-    for (u32 col = 0; col < SHELL_SCREEN_COLS; col++) {
-        console_put_char(' ');
-    }
-}
-
-static void shell_draw_current_line_at(u32 row) {
-    if (row >= SHELL_SCREEN_ROWS) {
-        row = SHELL_SCREEN_ROWS - 1;
-    }
-
-    shell_clear_screen_row_for_completion(row);
-    console_set_cursor(row, 0);
-
-    shell_draw_prompt();
-    print(line_buffer);
-
-    prompt_row = row;
-    prompt_col = SHELL_PROMPT_LEN;
-    last_rendered_length = line_length;
-
-    console_set_cursor(prompt_row, prompt_col + cursor_index);
-}
-
-static void shell_forget_completion_list(void) {
-    completion_list_visible = 0;
-    completion_list_rows = 0;
-    completion_base_row = 0;
-}
-
-static void shell_mark_completion_list(u32 base_row, u32 rows) {
-    completion_list_visible = 1;
-    completion_base_row = base_row;
-    completion_list_rows = rows;
-}
-
-static void shell_clear_completion_list_if_visible(void) {
-    if (!completion_list_visible || completion_list_rows == 0) {
-        return;
-    }
-
-    /*
-     * completion 출력은 현재 prompt 아래쪽에 생긴 transient UI다.
-     * console_clear()를 쓰면 shell의 prompt_row 상태와 실제 화면이 어긋난다.
-     * 그래서 completion이 사용한 row만 지운 뒤 원래 prompt row를 다시 그린다.
-     */
-    u32 base = completion_base_row;
-    u32 rows = completion_list_rows;
-
-    for (u32 i = 1; i <= rows; i++) {
-        u32 row = base + i;
-
-        if (row >= SHELL_SCREEN_ROWS) {
-            break;
-        }
-
-        shell_clear_screen_row_for_completion(row);
-    }
-
-    shell_draw_current_line_at(base);
-    shell_forget_completion_list();
-}
 
 static void shell_replace_path_token_prefix(
     u32 token_start,
@@ -692,9 +621,6 @@ static void shell_apply_completion(const char* command) {
 }
 
 static void shell_print_completion_matches(const char* prefix) {
-    u32 printed = 0;
-    u32 base_row = prompt_row;
-
     print("\n");
 
     for (u32 i = 0; i < SHELL_COMPLETION_COUNT; i++) {
@@ -707,37 +633,18 @@ static void shell_print_completion_matches(const char* prefix) {
         print("  ");
         print(candidate);
         print("\n");
-
-        printed++;
     }
 
     shell_draw_prompt();
     print(line_buffer);
 
-    if (printed > 0) {
-        u32 bottom_row = base_row + printed + 1;
-
-        if (bottom_row >= SHELL_SCREEN_ROWS) {
-            bottom_row = SHELL_SCREEN_ROWS - 1;
-        }
-
-        prompt_row = bottom_row;
-        prompt_col = SHELL_PROMPT_LEN;
-        last_rendered_length = line_length;
-
-        console_set_cursor(prompt_row, prompt_col + cursor_index);
-
-        /*
-         * 지울 row:
-         *   base_row + 1  : 빈 줄 또는 첫 후보 줄
-         *   ...
-         *   base_row + N  : 후보들
-         *   base_row + N+1: 임시 prompt 줄
-         */
-        shell_mark_completion_list(base_row, printed + 1);
-    } else {
-        shell_forget_completion_list();
-    }
+    /*
+     * 후보 출력은 일반 출력으로 남긴다.
+     * transient erase는 console overlay API를 만든 뒤 다시 넣는다.
+     */
+    console_get_cursor(&prompt_row, &prompt_col);
+    prompt_col = SHELL_PROMPT_LEN;
+    last_rendered_length = line_length;
 }
 
 static void shell_complete_command(void) {
@@ -1080,9 +987,6 @@ static void shell_print_path_matches(
         return;
     }
 
-    u32 printed = 0;
-    u32 base_row = prompt_row;
-
     print("\n");
 
     vfs_node_t* child = parent->first_child;
@@ -1105,7 +1009,6 @@ static void shell_print_path_matches(
             }
 
             print("\n");
-            printed++;
         }
 
         child = child->next_sibling;
@@ -1114,23 +1017,13 @@ static void shell_print_path_matches(
     shell_draw_prompt();
     print(line_buffer);
 
-    if (printed > 0) {
-        u32 bottom_row = base_row + printed + 1;
-
-        if (bottom_row >= SHELL_SCREEN_ROWS) {
-            bottom_row = SHELL_SCREEN_ROWS - 1;
-        }
-
-        prompt_row = bottom_row;
-        prompt_col = SHELL_PROMPT_LEN;
-        last_rendered_length = line_length;
-
-        console_set_cursor(prompt_row, prompt_col + cursor_index);
-
-        shell_mark_completion_list(base_row, printed + 1);
-    } else {
-        shell_forget_completion_list();
-    }
+    /*
+     * 후보 출력은 일반 출력으로 남긴다.
+     * transient erase는 console overlay API를 만든 뒤 다시 넣는다.
+     */
+    console_get_cursor(&prompt_row, &prompt_col);
+    prompt_col = SHELL_PROMPT_LEN;
+    last_rendered_length = line_length;
 }
 
 static u32 shell_complete_path(void) {
@@ -1315,11 +1208,6 @@ static void shell_on_char(char c) {
 }
 
 static void shell_on_key(tty_key_t key) {
-    if (key != TTY_KEY_TAB) {
-        shell_clear_completion_list_if_visible();
-    }
-
-
     if (key == TTY_KEY_LEFT) {
         shell_cursor_left();
         return;

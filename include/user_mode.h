@@ -12,6 +12,9 @@ u64 user_mode_entry_address(void);
 u64 user_mode_blob_start(void);
 u64 user_mode_blob_end(void);
 
+void user_mode_mark_user_range(u64 start, u64 size);
+u64 user_mode_enter(u64 user_rip);
+
 void user_mode_register_builtin_commands(void);
 
 #endif

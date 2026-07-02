@@ -1,4 +1,5 @@
 #include "command.h"
+#include "console.h"
 #include "fd.h"
 #include "print.h"
 #include "syscall.h"

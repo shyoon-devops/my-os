@@ -3,6 +3,7 @@
 #include "fd.h"
 #include "print.h"
 #include "syscall.h"
+#include "tty.h"
 #include "types.h"
 
 #define SYSCALL_TABLE_SIZE 16
@@ -13,6 +14,23 @@ static u32 syscall_count = 0;
 static u32 syscall_initialized = 0;
 static u32 user_exit_requested = 0;
 static u64 user_exit_code = 0;
+
+static u64 sys_read_stdin_poll(void* buffer, u64 size) {
+    if (size < sizeof(tty_key_t)) {
+        return SYSCALL_ERR_FAULT;
+    }
+
+    tty_key_t key = 0;
+
+    for (;;) {
+        if (tty_read_key(&key)) {
+            *((tty_key_t*)buffer) = key;
+            return sizeof(tty_key_t);
+        }
+
+        __asm__ volatile ("sti\nhlt\ncli" ::: "memory");
+    }
+}
 
 static u64 sys_read(
     u64 arg0,
@@ -32,6 +50,10 @@ static u64 sys_read(
 
     if (!buffer || size == 0) {
         return SYSCALL_ERR_FAULT;
+    }
+
+    if (fd == FD_STDIN) {
+        return sys_read_stdin_poll(buffer, size);
     }
 
     s64 result = fd_read(fd, buffer, size);
@@ -264,26 +286,14 @@ static void cmd_syscalltest(const char* args) {
     print_syscall_result(pid);
     print("\n");
 
-    u64 exit_code = syscall_dispatch(
-        SYS_EXIT,
-        7,
-        0,
-        0,
-        0,
-        0,
-        0
-    );
+    u64 bad = syscall_dispatch(999, 0, 0, 0, 0, 0, 0);
 
-    print("SYS_exit returned ");
-    print_syscall_result(exit_code);
-    print("\n");
-
-    print("SYS_exit take returned ");
-    print_syscall_result(syscall_take_user_exit_code());
+    print("SYS_999 returned ");
+    print_syscall_result(bad);
     print("\n");
 }
 
 void syscall_register_builtin_commands(void) {
-    command_register("syscallinfo", "show syscall dispatch table", cmd_syscallinfo);
-    command_register("syscalltest", "test syscall dispatcher from kernel", cmd_syscalltest);
+    command_register("syscallinfo", "show syscall table", cmd_syscallinfo);
+    command_register("syscalltest", "run kernel-side syscall dispatch test", cmd_syscalltest);
 }

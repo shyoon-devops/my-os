@@ -1,5 +1,5 @@
-#ifndef GO_OS_SERIAL_H
-#define GO_OS_SERIAL_H
+#ifndef MY_OS_SERIAL_H
+#define MY_OS_SERIAL_H
 
 #include "types.h"
 

@@ -1,5 +1,5 @@
-#ifndef GO_OS_RTC_H
-#define GO_OS_RTC_H
+#ifndef MY_OS_RTC_H
+#define MY_OS_RTC_H
 
 #include "types.h"
 

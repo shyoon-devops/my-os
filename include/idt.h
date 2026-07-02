@@ -1,5 +1,5 @@
-#ifndef GO_OS_IDT_H
-#define GO_OS_IDT_H
+#ifndef MY_OS_IDT_H
+#define MY_OS_IDT_H
 
 #include "types.h"
 

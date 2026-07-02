@@ -3,6 +3,14 @@ CC=gcc
 LD=ld
 QEMU=qemu-system-x86_64
 
+BUILD_DIR=build
+ISO_DIR=$(BUILD_DIR)/iso
+
+KERNEL=$(BUILD_DIR)/kernel.elf
+ISO=$(BUILD_DIR)/my-os.iso
+
+GIT_MSG?=
+
 CFLAGS=-std=gnu11 \
        -ffreestanding \
        -fno-builtin \
@@ -26,9 +34,6 @@ LDFLAGS=-T linker.ld \
         -z max-page-size=0x1000 \
         -m elf_x86_64
 
-KERNEL=kernel.elf
-ISO=os.iso
-
 C_SOURCES= \
     kernel/kernel.c \
     kernel/console.c \
@@ -42,6 +47,7 @@ C_SOURCES= \
     kernel/pit.c \
     kernel/keyboard.c \
     kernel/tty.c \
+    kernel/wait.c \
     kernel/shell.c \
     kernel/heap.c \
     kernel/command.c \
@@ -56,13 +62,13 @@ C_SOURCES= \
     kernel/task.c \
     kernel/utils.c
 
-C_OBJECTS=$(C_SOURCES:.c=.o)
-
 ASM_SOURCES= \
     kernel/interrupt.asm \
     kernel/task_switch.asm
 
-ASM_OBJECTS=$(ASM_SOURCES:.asm=.o)
+BOOT_OBJECT=$(BUILD_DIR)/boot.o
+C_OBJECTS=$(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
+ASM_OBJECTS=$(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
 
 QEMU_MEM?=256M
 
@@ -73,23 +79,27 @@ QEMU_COMMON=-cdrom $(ISO) \
 
 all: $(ISO)
 
-boot.o: boot.asm
-	$(ASM) -f elf64 boot.asm -o boot.o
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-kernel/%.o: kernel/%.asm
+$(BOOT_OBJECT): boot.asm
+	mkdir -p $(@D)
 	$(ASM) -f elf64 $< -o $@
 
-$(KERNEL): boot.o $(C_OBJECTS) $(ASM_OBJECTS) linker.ld
-	$(LD) $(LDFLAGS) -o $(KERNEL) boot.o $(C_OBJECTS) $(ASM_OBJECTS)
+$(BUILD_DIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: %.asm
+	mkdir -p $(@D)
+	$(ASM) -f elf64 $< -o $@
+
+$(KERNEL): $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) linker.ld
+	mkdir -p $(@D)
+	$(LD) $(LDFLAGS) -o $(KERNEL) $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS)
 
 $(ISO): $(KERNEL) grub.cfg
-	mkdir -p iso/boot/grub
-	cp $(KERNEL) iso/boot/kernel.elf
-	cp grub.cfg iso/boot/grub/grub.cfg
-	grub-mkrescue -o $(ISO) iso
+	mkdir -p $(ISO_DIR)/boot/grub
+	cp $(KERNEL) $(ISO_DIR)/boot/kernel.elf
+	cp grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
+	grub-mkrescue -o $(ISO) $(ISO_DIR)
 
 check: $(KERNEL)
 	grub-file --is-x86-multiboot2 $(KERNEL)
@@ -124,5 +134,24 @@ run-curses-serial-log: $(ISO)
 	  -display curses \
 	  -serial file:serial.log
 
+rename:
+	./scripts/rename-my-os.sh
+
+git-status:
+	git status --short
+
+commit:
+	@if [ -z "$(GIT_MSG)" ]; then \
+	  echo 'Usage: make commit GIT_MSG="[phase-02] your message"'; \
+	  exit 1; \
+	fi
+	git add --all
+	git commit -m "$(GIT_MSG)"
+	git push
+
 clean:
-	rm -rf boot.o kernel/*.o $(KERNEL) $(ISO) iso serial.log
+	rm -rf $(BUILD_DIR)
+	rm -rf iso
+	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
+
+.PHONY: all check run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean

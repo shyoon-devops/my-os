@@ -41,7 +41,7 @@ static void shell_redraw_line(void) {
 }
 
 static void shell_print_prompt(void) {
-    print_color("go-os> ", COLOR_GREEN_ON_BLACK);
+    print_color("my-os> ", COLOR_GREEN_ON_BLACK);
 
     console_get_cursor(&prompt_row, &prompt_col);
 
@@ -192,15 +192,16 @@ static void shell_task(void* arg) {
     (void)arg;
 
     for (;;) {
-        shell_poll();
+        tty_key_t key;
 
         /*
-         * 아직 blocking read / wait queue가 없으므로
-         * 1 tick마다 깨어나 tty buffer를 확인한다.
+         * polling 제거.
          *
-         * PIT 100Hz 기준 1 tick은 약 10ms.
+         * 입력이 있으면 즉시 하나 읽고,
+         * 입력이 없으면 tty wait queue에서 WAITING 상태로 잠든다.
          */
-        task_sleep_ticks(1);
+        tty_read_key_blocking(&key);
+        shell_on_key(key);
     }
 }
 

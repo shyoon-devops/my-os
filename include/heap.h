@@ -1,5 +1,5 @@
-#ifndef GO_OS_HEAP_H
-#define GO_OS_HEAP_H
+#ifndef MY_OS_HEAP_H
+#define MY_OS_HEAP_H
 
 #include "types.h"
 

@@ -1,5 +1,5 @@
-#ifndef GO_OS_PIT_H
-#define GO_OS_PIT_H
+#ifndef MY_OS_PIT_H
+#define MY_OS_PIT_H
 
 #include "types.h"
 

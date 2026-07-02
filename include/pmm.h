@@ -1,5 +1,5 @@
-#ifndef GO_OS_PMM_H
-#define GO_OS_PMM_H
+#ifndef MY_OS_PMM_H
+#define MY_OS_PMM_H
 
 #include "types.h"
 

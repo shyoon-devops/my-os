@@ -1,5 +1,5 @@
-#ifndef GO_OS_PIC_H
-#define GO_OS_PIC_H
+#ifndef MY_OS_PIC_H
+#define MY_OS_PIC_H
 
 #include "types.h"
 

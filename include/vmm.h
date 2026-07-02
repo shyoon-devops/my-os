@@ -1,5 +1,5 @@
-#ifndef GO_OS_VMM_H
-#define GO_OS_VMM_H
+#ifndef MY_OS_VMM_H
+#define MY_OS_VMM_H
 
 #include "types.h"
 

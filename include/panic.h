@@ -1,5 +1,5 @@
-#ifndef GO_OS_PANIC_H
-#define GO_OS_PANIC_H
+#ifndef MY_OS_PANIC_H
+#define MY_OS_PANIC_H
 
 #include "types.h"
 

@@ -1,5 +1,5 @@
-#ifndef GO_OS_TTY_H
-#define GO_OS_TTY_H
+#ifndef MY_OS_TTY_H
+#define MY_OS_TTY_H
 
 #include "types.h"
 
@@ -26,6 +26,12 @@ u32 tty_push_key(tty_key_t key);
 u32 tty_push_char(char c);
 
 u32 tty_read_key(tty_key_t* out);
+
+/*
+ * 키가 들어올 때까지 현재 task를 wait queue에서 재운다.
+ */
+void tty_read_key_blocking(tty_key_t* out);
+
 u32 tty_available(void);
 
 #endif

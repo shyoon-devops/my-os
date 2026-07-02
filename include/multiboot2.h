@@ -1,5 +1,5 @@
-#ifndef GO_OS_MULTIBOOT2_H
-#define GO_OS_MULTIBOOT2_H
+#ifndef MY_OS_MULTIBOOT2_H
+#define MY_OS_MULTIBOOT2_H
 
 #include "types.h"
 

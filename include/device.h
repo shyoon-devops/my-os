@@ -1,5 +1,5 @@
-#ifndef GO_OS_DEVICE_H
-#define GO_OS_DEVICE_H
+#ifndef MY_OS_DEVICE_H
+#define MY_OS_DEVICE_H
 
 #include "types.h"
 

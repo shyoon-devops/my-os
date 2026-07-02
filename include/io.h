@@ -1,5 +1,5 @@
-#ifndef GO_OS_IO_H
-#define GO_OS_IO_H
+#ifndef MY_OS_IO_H
+#define MY_OS_IO_H
 
 #include "types.h"
 

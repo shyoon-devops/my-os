@@ -1,4 +1,41 @@
-**/*.o
+# Build outputs
+build/
 iso/
-*.iso
+
+# Object / binary artifacts
+*.o
+*.a
+*.so
 *.elf
+*.iso
+*.bin
+*.img
+*.map
+
+# Kernel/debug logs
+serial.log
+*.log
+
+# QEMU temporary files
+*.qcow2
+*.raw
+qemu.log
+
+# Generated dependency files
+*.d
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Linux desktop trash
+.Trash-*/
+
+# Claude / AI local workspace noise
+.claude/

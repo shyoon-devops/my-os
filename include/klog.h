@@ -1,5 +1,5 @@
-#ifndef GO_OS_KLOG_H
-#define GO_OS_KLOG_H
+#ifndef MY_OS_KLOG_H
+#define MY_OS_KLOG_H
 
 #include "types.h"
 

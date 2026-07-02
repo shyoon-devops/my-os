@@ -1,5 +1,5 @@
-#ifndef GO_OS_CONSOLE_H
-#define GO_OS_CONSOLE_H
+#ifndef MY_OS_CONSOLE_H
+#define MY_OS_CONSOLE_H
 
 #include "types.h"
 

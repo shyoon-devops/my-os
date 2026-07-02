@@ -1,4 +1,4 @@
-# go-os Multiboot2 x86_64 split version
+# my-os Multiboot2 x86_64 split version
 
 GRUB Multiboot2로 부팅하고, 32비트 entry에서 x86_64 long mode로 전환한 뒤 C 커널을 실행하는 실습 프로젝트입니다.
 
@@ -32,14 +32,14 @@ GRUB Multiboot2로 부팅하고, 32비트 entry에서 x86_64 long mode로 전환
 ## Docker 빌드
 
 ```bash
-docker build --platform linux/amd64 -t go-os-build .
+docker build --platform linux/amd64 -t my-os-build .
 ```
 
 ```bash
 docker run --rm -it \
   --platform linux/amd64 \
   -v "$PWD:/work" \
-  go-os-build
+  my-os-build
 ```
 
 컨테이너 안에서:

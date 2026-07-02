@@ -1,5 +1,5 @@
-#ifndef GO_OS_WORKQUEUE_H
-#define GO_OS_WORKQUEUE_H
+#ifndef MY_OS_WORKQUEUE_H
+#define MY_OS_WORKQUEUE_H
 
 #include "types.h"
 

@@ -28,6 +28,7 @@ typedef struct task {
     void* arg;
 
     struct task* next;
+    struct task* wait_next;
 } task_t;
 
 extern void task_context_switch(u64* old_rsp, u64 new_rsp);
@@ -99,6 +100,8 @@ const char* task_state_name(task_state_t state) {
             return "running";
         case TASK_STATE_SLEEPING:
             return "sleeping";
+        case TASK_STATE_WAITING:
+            return "waiting";
         case TASK_STATE_DONE:
             return "done";
         case TASK_STATE_UNUSED:
@@ -162,6 +165,19 @@ u32 task_create(const char* name, task_entry_t entry, void* arg) {
     u64 stack_top = (u64)stack + TASK_STACK_SIZE;
     stack_top = align_down_u64_local(stack_top, 16);
 
+    /*
+     * task_context_switch()가 새 stack으로 전환하면 아래 순서대로 pop한다.
+     *
+     *   pop r15
+     *   pop r14
+     *   pop r13
+     *   pop r12
+     *   pop rbx
+     *   pop rbp
+     *   ret
+     *
+     * 그래서 초기 stack에 fake register frame을 만들어 둔다.
+     */
     u64* sp = (u64*)stack_top;
 
     *(--sp) = (u64)task_entry_trampoline;
@@ -186,6 +202,7 @@ u32 task_create(const char* name, task_entry_t entry, void* arg) {
     task->arg = arg;
 
     task->next = 0;
+    task->wait_next = 0;
 
     u64 flags;
     spin_lock_irqsave(&task_lock, &flags);
@@ -352,6 +369,70 @@ void task_exit(void) {
     KPANIC("task_exit returned unexpectedly");
 }
 
+/*
+ * ---- wait queue용 최소 primitive ----
+ *
+ * 지금은 단일 CPU + cooperative scheduler 기준이다.
+ * 따라서 wait queue 쪽에서는 IRQ 차단으로 keyboard IRQ와의 경합을 막는다.
+ */
+struct task* task_current(void) {
+    return current_task;
+}
+
+void task_set_waiting(struct task* task) {
+    if (!task) {
+        return;
+    }
+
+    task->state = TASK_STATE_WAITING;
+}
+
+void task_set_ready(struct task* task) {
+    if (!task) {
+        return;
+    }
+
+    if (task->state == TASK_STATE_WAITING) {
+        task->state = TASK_STATE_READY;
+    }
+}
+
+struct task* task_wait_next(struct task* task) {
+    if (!task) {
+        return 0;
+    }
+
+    return task->wait_next;
+}
+
+void task_wait_set_next(struct task* task, struct task* next) {
+    if (!task) {
+        return;
+    }
+
+    task->wait_next = next;
+}
+
+void task_block_switch(void) {
+    if (!current_task) {
+        return;
+    }
+
+    u64 flags;
+
+    spin_lock_irqsave(&task_lock, &flags);
+
+    u64* old_rsp = &current_task->rsp;
+    u64 target_rsp = scheduler_rsp;
+
+    spin_unlock_irqrestore(&task_lock, flags);
+
+    task_context_switch(old_rsp, target_rsp);
+}
+
+/*
+ * task_entry_trampoline에서 호출된다.
+ */
 void task_trampoline(void) {
     if (!current_task) {
         KPANIC("task_trampoline without current task");
@@ -408,6 +489,27 @@ u32 task_sleeping_count(void) {
 
     while (current) {
         if (current->state == TASK_STATE_SLEEPING) {
+            count++;
+        }
+
+        current = current->next;
+    }
+
+    spin_unlock_irqrestore(&task_lock, flags);
+
+    return count;
+}
+
+u32 task_waiting_count(void) {
+    u64 flags;
+    u32 count = 0;
+
+    spin_lock_irqsave(&task_lock, &flags);
+
+    task_t* current = task_head;
+
+    while (current) {
+        if (current->state == TASK_STATE_WAITING) {
             count++;
         }
 
@@ -579,6 +681,10 @@ static void cmd_taskstats(const char* args) {
 
     print("sleeping tasks = ");
     print_dec64(task_sleeping_count());
+    print("\n");
+
+    print("waiting tasks = ");
+    print_dec64(task_waiting_count());
     print("\n");
 }
 

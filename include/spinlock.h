@@ -1,5 +1,5 @@
-#ifndef GO_OS_SPINLOCK_H
-#define GO_OS_SPINLOCK_H
+#ifndef MY_OS_SPINLOCK_H
+#define MY_OS_SPINLOCK_H
 
 #include "types.h"
 

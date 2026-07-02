@@ -1,5 +1,5 @@
-#ifndef GO_OS_IRQ_H
-#define GO_OS_IRQ_H
+#ifndef MY_OS_IRQ_H
+#define MY_OS_IRQ_H
 
 #include "types.h"
 

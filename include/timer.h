@@ -1,5 +1,5 @@
-#ifndef GO_OS_TIMER_H
-#define GO_OS_TIMER_H
+#ifndef MY_OS_TIMER_H
+#define MY_OS_TIMER_H
 
 #include "types.h"
 #include "workqueue.h"

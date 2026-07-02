@@ -1,5 +1,5 @@
-#ifndef GO_OS_COMMAND_H
-#define GO_OS_COMMAND_H
+#ifndef MY_OS_COMMAND_H
+#define MY_OS_COMMAND_H
 
 #include "types.h"
 

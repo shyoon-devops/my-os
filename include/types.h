@@ -1,5 +1,5 @@
-#ifndef GO_OS_TYPES_H
-#define GO_OS_TYPES_H
+#ifndef MY_OS_TYPES_H
+#define MY_OS_TYPES_H
 
 typedef unsigned char      u8;
 typedef unsigned short     u16;

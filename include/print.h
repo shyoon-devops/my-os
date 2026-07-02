@@ -1,5 +1,5 @@
-#ifndef GO_OS_PRINT_H
-#define GO_OS_PRINT_H
+#ifndef MY_OS_PRINT_H
+#define MY_OS_PRINT_H
 
 #include "types.h"
 

@@ -5,6 +5,7 @@ iso/
 # Generated initramfs artifacts
 initramfs/bin/init
 initramfs/bin/hello
+initramfs/bin/readkey
 
 # Object / binary artifacts
 *.o

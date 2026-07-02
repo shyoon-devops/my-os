@@ -7,22 +7,14 @@
 #include "print.h"
 #include "types.h"
 #include "user_mode.h"
-#include "utils.h"
 #include "vfs.h"
 #include "vmm.h"
 
-#define PAGE_SIZE 4096
 #define USER_STACK_SIZE 16384
 
 #define USER_EXEC_PATH_MAX 128
 #define USER_EXEC_MIN_VADDR 0x0000000010000000ULL
 #define USER_EXEC_MAX_VADDR 0x0000000080000000ULL
-
-#define PTE_PRESENT 0x001ull
-#define PTE_RW      0x002ull
-#define PTE_USER    0x004ull
-#define PTE_PS      0x080ull
-#define PTE_ADDR_MASK 0x000FFFFFFFFFF000ull
 
 extern u64 ring3_enter(u64 user_rip, u64 user_rsp);
 extern void ring3_user_entry(void);
@@ -69,7 +61,7 @@ static void mark_user_page(u64 vaddr) {
         return;
     }
 
-    pml4[pml4_i] |= PTE_USER | PTE_RW;
+    pml4[pml4_i] |= PTE_USER | PTE_WRITABLE;
 
     u64* pdpt = table_from_entry(pml4[pml4_i]);
 
@@ -77,9 +69,9 @@ static void mark_user_page(u64 vaddr) {
         return;
     }
 
-    pdpt[pdpt_i] |= PTE_USER | PTE_RW;
+    pdpt[pdpt_i] |= PTE_USER | PTE_WRITABLE;
 
-    if (pdpt[pdpt_i] & PTE_PS) {
+    if (pdpt[pdpt_i] & PTE_HUGE) {
         return;
     }
 
@@ -89,9 +81,9 @@ static void mark_user_page(u64 vaddr) {
         return;
     }
 
-    pd[pd_i] |= PTE_USER | PTE_RW;
+    pd[pd_i] |= PTE_USER | PTE_WRITABLE;
 
-    if (pd[pd_i] & PTE_PS) {
+    if (pd[pd_i] & PTE_HUGE) {
         return;
     }
 
@@ -101,7 +93,7 @@ static void mark_user_page(u64 vaddr) {
         return;
     }
 
-    pt[pt_i] |= PTE_USER | PTE_RW;
+    pt[pt_i] |= PTE_USER | PTE_WRITABLE;
 }
 
 static void mark_user_range(u64 start, u64 size) {
@@ -197,6 +189,10 @@ static u32 user_exec_range_ok(u64 start, u64 size) {
         return 0;
     }
 
+    if (start >= USER_EXEC_MAX_VADDR) {
+        return 0;
+    }
+
     if (size > USER_EXEC_MAX_VADDR - start) {
         return 0;
     }
@@ -289,8 +285,8 @@ static void user_exec_unmap_range(u64 start, u64 size) {
         return;
     }
 
-    u64 begin = align_down_u64(start, PAGE_SIZE);
-    u64 end = align_up_u64(start + size, PAGE_SIZE);
+    u64 begin = align_down(start, PAGE_SIZE);
+    u64 end = align_up(start + size, PAGE_SIZE);
 
     for (u64 addr = begin; addr < end; addr += PAGE_SIZE) {
         if (vmm_get_mapping(addr) != 0) {
@@ -304,8 +300,8 @@ static u32 user_exec_map_range(u64 start, u64 size) {
         return 0;
     }
 
-    u64 begin = align_down_u64(start, PAGE_SIZE);
-    u64 end = align_up_u64(start + size, PAGE_SIZE);
+    u64 begin = align_down(start, PAGE_SIZE);
+    u64 end = align_up(start + size, PAGE_SIZE);
 
     for (u64 addr = begin; addr < end; addr += PAGE_SIZE) {
         if (vmm_get_mapping(addr) != 0) {
@@ -357,8 +353,8 @@ static s32 user_exec_map_load_segment(
         return -1;
     }
 
-    u64 begin = align_down_u64(phdr->p_vaddr, PAGE_SIZE);
-    u64 end = align_up_u64(phdr->p_vaddr + phdr->p_memsz, PAGE_SIZE);
+    u64 begin = align_down(phdr->p_vaddr, PAGE_SIZE);
+    u64 end = align_up(phdr->p_vaddr + phdr->p_memsz, PAGE_SIZE);
 
     if (!user_exec_map_range(phdr->p_vaddr, phdr->p_memsz)) {
         return -1;
@@ -449,6 +445,32 @@ static s32 user_exec_run_path(const char* path, u64* out_exit_code) {
     return 0;
 }
 
+static void user_exec_print_result(const char* command_name, const char* target, u64 exit_code) {
+    print("returned from user ELF\n");
+    print(command_name);
+    print(": ");
+    print(target);
+    print(" exited with code ");
+    print_dec64(exit_code);
+    print("\n");
+}
+
+static void user_exec_run_command(const char* command_name, const char* target) {
+    print("loading user ELF: ");
+    print(target);
+    print("\n");
+
+    u64 exit_code = 0;
+
+    if (user_exec_run_path(target, &exit_code) != 0) {
+        print(command_name);
+        print(": failed to run user ELF\n");
+        return;
+    }
+
+    user_exec_print_result(command_name, target, exit_code);
+}
+
 static void cmd_initrun(const char* args) {
     char path[USER_EXEC_PATH_MAX];
     const char* target = "/bin/init";
@@ -457,21 +479,18 @@ static void cmd_initrun(const char* args) {
         target = path;
     }
 
-    print("loading user ELF: ");
-    print(target);
-    print("\n");
+    user_exec_run_command("initrun", target);
+}
 
-    u64 exit_code = 0;
+static void cmd_exec(const char* args) {
+    char path[USER_EXEC_PATH_MAX];
 
-    if (user_exec_run_path(target, &exit_code) != 0) {
-        print("initrun: failed to run user ELF\n");
+    if (!user_exec_copy_first_arg(args, path, sizeof(path))) {
+        print("usage: exec /bin/<program>\n");
         return;
     }
 
-    print("returned from user ELF\n");
-    print("exit code = ");
-    print_dec64(exit_code);
-    print("\n");
+    user_exec_run_command("exec", path);
 }
 
 void user_mode_init(void) {
@@ -575,4 +594,5 @@ void user_mode_register_builtin_commands(void) {
     command_register("ring3info", "show ring3 smoke test state", cmd_ring3info);
     command_register("ring3test", "enter ring3 and return through SYS_exit", cmd_ring3test);
     command_register("initrun", "run /bin/init ELF in ring3", cmd_initrun);
+    command_register("exec", "run a user ELF from initramfs", cmd_exec);
 }

@@ -10,15 +10,19 @@
  */
 typedef u16 tty_key_t;
 
-#define TTY_KEY_BACKSPACE 0x0008
-#define TTY_KEY_TAB       0x0009
-#define TTY_KEY_ENTER     0x000A
-#define TTY_KEY_ESC       0x001B
+#define TTY_KEY_BACKSPACE  0x0008
+#define TTY_KEY_TAB        0x0009
+#define TTY_KEY_ENTER      0x000A
+#define TTY_KEY_ESC        0x001B
 
-#define TTY_KEY_LEFT      0x0101
-#define TTY_KEY_RIGHT     0x0102
-#define TTY_KEY_HOME      0x0103
-#define TTY_KEY_END       0x0104
+#define TTY_KEY_LEFT       0x0101
+#define TTY_KEY_RIGHT      0x0102
+#define TTY_KEY_HOME       0x0103
+#define TTY_KEY_END        0x0104
+#define TTY_KEY_UP         0x0105
+#define TTY_KEY_DOWN       0x0106
+#define TTY_KEY_PAGE_UP    0x0107
+#define TTY_KEY_PAGE_DOWN  0x0108
 
 void tty_init(void);
 

@@ -1,5 +1,6 @@
 #include "command.h"
 #include "console.h"
+#include "fd.h"
 #include "print.h"
 #include "shell.h"
 #include "task.h"
@@ -1154,11 +1155,19 @@ static void shell_task(void* arg) {
         tty_key_t key;
 
         /*
-         * 입력이 있으면 즉시 하나 읽고,
-         * 입력이 없으면 tty wait queue에서 WAITING 상태로 잠든다.
+         * Phase 6:
+         *   shell이 tty를 직접 읽지 않고 fd 0(stdin)을 통해 읽는다.
+         *
+         * 흐름:
+         *   fd_read(0)
+         *     -> /dev/tty0 read
+         *     -> tty_read_key_blocking()
          */
-        tty_read_key_blocking(&key);
-        shell_on_key(key);
+        s64 read = fd_read(FD_STDIN, &key, sizeof(key));
+
+        if (read == (s64)sizeof(key)) {
+            shell_on_key(key);
+        }
     }
 }
 

@@ -7,6 +7,7 @@
 #include "irq.h"
 #include "keyboard.h"
 #include "klog.h"
+#include "mouse.h"
 #include "multiboot2.h"
 #include "panic.h"
 #include "pic.h"
@@ -108,6 +109,21 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     print("\n");
     ramfs_init();
 
+    vfs_node_t* dev_dir = vfs_lookup("/dev");
+
+    if (dev_dir) {
+        ramfs_create_device(
+            dev_dir,
+            "tty0",
+            tty_vfs_read,
+            tty_vfs_write
+        );
+
+        print_color("/dev/tty0 registered\n", COLOR_GREEN_ON_BLACK);
+    } else {
+        print_color("failed to find /dev for tty0\n", COLOR_RED_ON_BLACK);
+    }
+
     print("\n");
     fd_init();
 
@@ -123,6 +139,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     task_register_builtin_commands();
     vfs_register_builtin_commands();
     fd_register_builtin_commands();
+    mouse_register_builtin_commands();
 
     print("\n");
     pic_init();
@@ -132,6 +149,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
 
     print("\n");
     keyboard_init();
+
+    print("\n");
+    mouse_init();
 
     print("\n");
     interrupts_enable();

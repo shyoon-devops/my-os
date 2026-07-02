@@ -12,18 +12,6 @@ typedef struct console_cell {
     u8 color;
 } console_cell_t;
 
-/*
- * scrollback buffer:
- *   최근 CONSOLE_SCROLLBACK_LINES 줄을 저장한다.
- *
- * logical line:
- *   콘솔이 시작된 뒤 출력된 줄 번호.
- *   current_line은 현재 쓰는 줄의 logical index다.
- *
- * physical line:
- *   scrollback 배열 안의 실제 index.
- *   logical % CONSOLE_SCROLLBACK_LINES 로 계산한다.
- */
 static console_cell_t scrollback[CONSOLE_SCROLLBACK_LINES][CONSOLE_WIDTH];
 
 static u64 current_line = 0;
@@ -32,8 +20,6 @@ static u32 current_col = 0;
 static u64 viewport_top = 0;
 
 static u8 current_color = COLOR_WHITE_ON_BLACK;
-
-static u8 vga_80x50_enabled = 0;
 
 static u64 min_u64(u64 a, u64 b) {
     return a < b ? a : b;
@@ -72,45 +58,9 @@ static u16 vga_entry(char ch, u8 color) {
     return (u16)((u16)color << 8) | (u8)ch;
 }
 
-static u8 vga_crtc_read(u8 index) {
-    outb(VGA_CRTC_INDEX, index);
-    return inb(VGA_CRTC_DATA);
-}
-
 static void vga_crtc_write(u8 index, u8 value) {
     outb(VGA_CRTC_INDEX, index);
     outb(VGA_CRTC_DATA, value);
-}
-
-static void vga_enable_80x50_text_mode(void) {
-    if (vga_80x50_enabled) {
-        return;
-    }
-
-    /*
-     * VGA text mode 80x50:
-     *
-     * 기본 GRUB text mode는 보통 80x25, character cell height 16이다.
-     * CRTC Maximum Scan Line register의 character height를 8로 줄이면
-     * 같은 400 scanline 화면에서 50줄을 표시할 수 있다.
-     *
-     * register 0x09:
-     *   bits 0-4 = maximum scan line
-     *   7 means 8 scanlines per character cell.
-     *
-     * QEMU/일반 VGA 호환 환경에서는 이 최소 설정으로 80x50 표시가 된다.
-     */
-    u8 max_scanline = vga_crtc_read(0x09);
-    max_scanline = (u8)((max_scanline & 0xE0) | 0x07);
-    vga_crtc_write(0x09, max_scanline);
-
-    /*
-     * cursor shape도 8 scanline 문자 높이에 맞춘다.
-     */
-    vga_crtc_write(0x0A, 0x06);
-    vga_crtc_write(0x0B, 0x07);
-
-    vga_80x50_enabled = 1;
 }
 
 static void hardware_cursor_set(u32 row, u32 col) {
@@ -159,10 +109,6 @@ static void render_viewport(void) {
         }
     }
 
-    /*
-     * 현재 입력 cursor가 viewport 안에 있을 때만 실제 위치로 보여준다.
-     * 과거 로그를 보는 중이면 cursor는 우하단에 둔다.
-     */
     if (current_line >= viewport_top &&
         current_line < viewport_top + CONSOLE_HEIGHT) {
         hardware_cursor_set((u32)(current_line - viewport_top), current_col);
@@ -187,8 +133,6 @@ static void move_to_next_line(void) {
 }
 
 void console_clear(void) {
-    vga_enable_80x50_text_mode();
-
     current_line = 0;
     current_col = 0;
     viewport_top = 0;
@@ -211,7 +155,11 @@ u8 console_get_color(void) {
 
 void console_put_char(char c) {
     /*
-     * 현재는 입력/출력이 들어오면 항상 bottom view로 복귀시킨다.
+     * 지금 정책:
+     *   새 출력이 발생하면 항상 현재 화면(bottom)으로 복귀한다.
+     *
+     * 그래서 과거 로그를 보고 있다가 명령어를 치면,
+     * 자연스럽게 최신 프롬프트 위치로 돌아온다.
      */
     viewport_top = scrollback_bottom_top();
 
@@ -348,6 +296,32 @@ void console_scroll_page_down(void) {
 
     viewport_top = min_u64(viewport_top + CONSOLE_HEIGHT, bottom);
 
+    render_viewport();
+}
+
+void console_scroll_line_up(void) {
+    u64 oldest = scrollback_oldest_line();
+
+    if (viewport_top <= oldest) {
+        viewport_top = oldest;
+        render_viewport();
+        return;
+    }
+
+    viewport_top--;
+    render_viewport();
+}
+
+void console_scroll_line_down(void) {
+    u64 bottom = scrollback_bottom_top();
+
+    if (viewport_top >= bottom) {
+        viewport_top = bottom;
+        render_viewport();
+        return;
+    }
+
+    viewport_top++;
     render_viewport();
 }
 

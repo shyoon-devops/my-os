@@ -82,12 +82,6 @@ u32 tty_push_key(tty_key_t key) {
 
     spin_unlock_irqrestore(&tty_lock, flags);
 
-    /*
-     * 실제로 키가 들어갔을 때만 기다리는 task를 깨운다.
-     *
-     * keyboard IRQ context에서 호출될 수 있으므로
-     * wake 함수는 짧게 끝나야 한다.
-     */
     if (result) {
         wait_queue_wake_one(&tty_wait_queue);
     }
@@ -134,11 +128,6 @@ void tty_read_key_blocking(tty_key_t* out) {
          *   2. 버퍼를 확인한다.
          *   3. 비어 있으면 wait queue에 등록한다.
          *   4. 그 뒤 IRQ를 복구하고 scheduler로 전환한다.
-         *
-         * 이 순서가 중요하다.
-         *
-         * "비었음 확인"과 "잠들기 등록" 사이에 키보드 IRQ가 끼어들면
-         * wakeup을 놓칠 수 있기 때문이다.
          */
         u64 flags = irq_save();
 
@@ -148,16 +137,6 @@ void tty_read_key_blocking(tty_key_t* out) {
         }
 
         wait_queue_block_irqrestore(&tty_wait_queue, flags);
-
-        /*
-         * 여기로 돌아왔다는 것은 keyboard IRQ 등으로 인해
-         * WAITING -> READY가 되었고, scheduler가 이 task를 다시 실행했다는 뜻이다.
-         *
-         * 바로 반환하지 않고 다시 루프를 돈다.
-         * 이유:
-         *   여러 task가 같은 wait queue에서 깨어날 수도 있고,
-         *   깨어났다고 해서 반드시 읽을 데이터가 남아 있다고 보장할 수는 없기 때문이다.
-         */
     }
 }
 
@@ -176,4 +155,42 @@ u32 tty_available(void) {
     spin_unlock_irqrestore(&tty_lock, flags);
 
     return available;
+}
+
+u64 tty_vfs_read(vfs_node_t* node, u64 offset, void* buffer, u64 size) {
+    (void)node;
+    (void)offset;
+
+    if (!buffer) {
+        return 0;
+    }
+
+    if (size < sizeof(tty_key_t)) {
+        return 0;
+    }
+
+    tty_key_t key;
+
+    tty_read_key_blocking(&key);
+
+    *((tty_key_t*)buffer) = key;
+
+    return sizeof(tty_key_t);
+}
+
+u64 tty_vfs_write(vfs_node_t* node, u64 offset, const void* buffer, u64 size) {
+    (void)node;
+    (void)offset;
+
+    if (!buffer || size == 0) {
+        return 0;
+    }
+
+    const char* text = (const char*)buffer;
+
+    for (u64 i = 0; i < size; i++) {
+        console_put_char(text[i]);
+    }
+
+    return size;
 }

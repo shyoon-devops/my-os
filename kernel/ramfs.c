@@ -241,6 +241,28 @@ vfs_node_t* ramfs_create_file(
     return node;
 }
 
+vfs_node_t* ramfs_create_device(
+    vfs_node_t* parent,
+    const char* name,
+    vfs_read_fn read,
+    vfs_write_fn write
+) {
+    vfs_node_t* node = ramfs_alloc_node(name, VFS_NODE_DEVICE);
+
+    if (!node) {
+        return 0;
+    }
+
+    node->read = read;
+    node->write = write;
+
+    if (parent) {
+        ramfs_add_child(parent, node);
+    }
+
+    return node;
+}
+
 void ramfs_init(void) {
     next_node_id = 1;
 

@@ -46,6 +46,7 @@ C_SOURCES= \
     kernel/pic.c \
     kernel/pit.c \
     kernel/keyboard.c \
+    kernel/mouse.c \
     kernel/tty.c \
     kernel/wait.c \
     kernel/shell.c \
@@ -145,7 +146,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-04] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-05g] your message"'; \
 	  exit 1; \
 	fi
 	git add --all

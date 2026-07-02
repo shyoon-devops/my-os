@@ -74,6 +74,33 @@ static const char* fd_type_name(fd_type_t type) {
     }
 }
 
+static void fd_set_vfs_node(
+    u32 fd,
+    vfs_node_t* node,
+    u32 readable,
+    u32 writable
+) {
+    fd_table[fd].used = 1;
+    fd_table[fd].type = FD_TYPE_VFS_NODE;
+    fd_table[fd].object = node;
+    fd_table[fd].offset = 0;
+    fd_table[fd].readable = readable;
+    fd_table[fd].writable = writable;
+}
+
+static void fd_set_console(
+    u32 fd,
+    u32 readable,
+    u32 writable
+) {
+    fd_table[fd].used = 1;
+    fd_table[fd].type = FD_TYPE_CONSOLE;
+    fd_table[fd].object = 0;
+    fd_table[fd].offset = 0;
+    fd_table[fd].readable = readable;
+    fd_table[fd].writable = writable;
+}
+
 void fd_init(void) {
     spinlock_init(&fd_lock);
 
@@ -82,41 +109,27 @@ void fd_init(void) {
     }
 
     /*
-     * fd 0/1/2는 표준 입출력 예약 번호다.
+     * Phase 6:
+     *   fd 0/1/2를 /dev/tty0에 연결한다.
      *
-     * 아직 /dev/tty0가 VFS device node로 붙지 않았으므로,
-     * stdin은 읽기 불가 예약 상태로 두고,
-     * stdout/stderr는 console 출력으로 연결한다.
+     * /dev/tty0가 아직 없으면 stdout/stderr는 console fallback으로 둔다.
      */
-    fd_table[FD_STDIN].used = 1;
-    fd_table[FD_STDIN].type = FD_TYPE_CONSOLE;
-    fd_table[FD_STDIN].object = 0;
-    fd_table[FD_STDIN].offset = 0;
-    fd_table[FD_STDIN].readable = 0;
-    fd_table[FD_STDIN].writable = 0;
+    vfs_node_t* tty0 = vfs_lookup("/dev/tty0");
 
-    fd_table[FD_STDOUT].used = 1;
-    fd_table[FD_STDOUT].type = FD_TYPE_CONSOLE;
-    fd_table[FD_STDOUT].object = 0;
-    fd_table[FD_STDOUT].offset = 0;
-    fd_table[FD_STDOUT].readable = 0;
-    fd_table[FD_STDOUT].writable = 1;
-
-    fd_table[FD_STDERR].used = 1;
-    fd_table[FD_STDERR].type = FD_TYPE_CONSOLE;
-    fd_table[FD_STDERR].object = 0;
-    fd_table[FD_STDERR].offset = 0;
-    fd_table[FD_STDERR].readable = 0;
-    fd_table[FD_STDERR].writable = 1;
+    if (tty0) {
+        fd_set_vfs_node(FD_STDIN, tty0, 1, 0);
+        fd_set_vfs_node(FD_STDOUT, tty0, 0, 1);
+        fd_set_vfs_node(FD_STDERR, tty0, 0, 1);
+    } else {
+        fd_set_console(FD_STDIN, 0, 0);
+        fd_set_console(FD_STDOUT, 0, 1);
+        fd_set_console(FD_STDERR, 0, 1);
+    }
 
     print_color("FD table initialized\n", COLOR_GREEN_ON_BLACK);
 }
 
 static s32 fd_alloc_locked(void) {
-    /*
-     * 0, 1, 2는 stdin/stdout/stderr로 예약.
-     * 일반 open은 3번부터 할당한다.
-     */
     for (u32 i = 3; i < FD_TABLE_SIZE; i++) {
         if (!fd_table[i].used) {
             fd_table[i].used = 1;
@@ -186,13 +199,15 @@ s64 fd_read(s32 fd, void* buffer, u64 size) {
 
         u64 read = vfs_read(node, entry.offset, buffer, size);
 
-        spin_lock_irqsave(&fd_lock, &flags);
+        if (node->type == VFS_NODE_FILE) {
+            spin_lock_irqsave(&fd_lock, &flags);
 
-        if (fd_table[fd].used && fd_table[fd].object == entry.object) {
-            fd_table[fd].offset += read;
+            if (fd_table[fd].used && fd_table[fd].object == entry.object) {
+                fd_table[fd].offset += read;
+            }
+
+            spin_unlock_irqrestore(&fd_lock, flags);
         }
-
-        spin_unlock_irqrestore(&fd_lock, flags);
 
         return (s64)read;
     }
@@ -234,13 +249,15 @@ s64 fd_write(s32 fd, const void* buffer, u64 size) {
 
         u64 written = vfs_write(node, entry.offset, buffer, size);
 
-        spin_lock_irqsave(&fd_lock, &flags);
+        if (node->type == VFS_NODE_FILE) {
+            spin_lock_irqsave(&fd_lock, &flags);
 
-        if (fd_table[fd].used && fd_table[fd].object == entry.object) {
-            fd_table[fd].offset += written;
+            if (fd_table[fd].used && fd_table[fd].object == entry.object) {
+                fd_table[fd].offset += written;
+            }
+
+            spin_unlock_irqrestore(&fd_lock, flags);
         }
-
-        spin_unlock_irqrestore(&fd_lock, flags);
 
         return (s64)written;
     }
@@ -253,9 +270,6 @@ s32 fd_close(s32 fd) {
         return -1;
     }
 
-    /*
-     * stdio는 닫지 않는다.
-     */
     if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR) {
         return -1;
     }
@@ -324,6 +338,9 @@ void fd_print_table(void) {
 
             print(" node=");
             print(node->name);
+
+            print(" kind=");
+            print(vfs_node_type_name(node->type));
 
             print(" size=");
             print_dec64(node->size);

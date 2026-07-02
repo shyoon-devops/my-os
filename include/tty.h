@@ -2,6 +2,7 @@
 #define MY_OS_TTY_H
 
 #include "types.h"
+#include "vfs.h"
 
 /*
  * tty_key_t:
@@ -37,5 +38,17 @@ u32 tty_read_key(tty_key_t* out);
 void tty_read_key_blocking(tty_key_t* out);
 
 u32 tty_available(void);
+
+/*
+ * /dev/tty0 VFS device callbacks.
+ *
+ * read:
+ *   tty_key_t 하나를 blocking read로 읽는다.
+ *
+ * write:
+ *   byte stream을 console에 출력한다.
+ */
+u64 tty_vfs_read(vfs_node_t* node, u64 offset, void* buffer, u64 size);
+u64 tty_vfs_write(vfs_node_t* node, u64 offset, const void* buffer, u64 size);
 
 #endif

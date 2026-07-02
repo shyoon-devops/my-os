@@ -46,6 +46,8 @@ void console_get_cursor(u32* row, u32* col);
 
 void console_scroll_page_up(void);
 void console_scroll_page_down(void);
+void console_scroll_line_up(void);
+void console_scroll_line_down(void);
 void console_scroll_to_bottom(void);
 
 u32 console_is_scrolled(void);

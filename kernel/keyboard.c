@@ -186,24 +186,53 @@ static void handle_extended_scancode(u8 scancode) {
         return;
     }
 
-    if (scancode == 0x4B) {
-        tty_push_key(TTY_KEY_LEFT);
-        return;
-    }
+    /*
+     * PS/2 keyboard Set 1 extended scancodes:
+     *
+     *   E0 47 = Home
+     *   E0 48 = Up
+     *   E0 49 = PageUp
+     *   E0 4B = Left
+     *   E0 4D = Right
+     *   E0 4F = End
+     *   E0 50 = Down
+     *   E0 51 = PageDown
+     */
+    switch (scancode) {
+        case 0x47:
+            tty_push_key(TTY_KEY_HOME);
+            break;
 
-    if (scancode == 0x4D) {
-        tty_push_key(TTY_KEY_RIGHT);
-        return;
-    }
+        case 0x48:
+            tty_push_key(TTY_KEY_UP);
+            break;
 
-    if (scancode == 0x47) {
-        tty_push_key(TTY_KEY_HOME);
-        return;
-    }
+        case 0x49:
+            tty_push_key(TTY_KEY_PAGE_UP);
+            break;
 
-    if (scancode == 0x4F) {
-        tty_push_key(TTY_KEY_END);
-        return;
+        case 0x4B:
+            tty_push_key(TTY_KEY_LEFT);
+            break;
+
+        case 0x4D:
+            tty_push_key(TTY_KEY_RIGHT);
+            break;
+
+        case 0x4F:
+            tty_push_key(TTY_KEY_END);
+            break;
+
+        case 0x50:
+            tty_push_key(TTY_KEY_DOWN);
+            break;
+
+        case 0x51:
+            tty_push_key(TTY_KEY_PAGE_DOWN);
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -217,6 +246,8 @@ void keyboard_init(void) {
         DEVICE_STATE_READY,
         "ps2-keyboard"
     );
+
+    (void)keyboard_device;
 
     print_color("Keyboard initialized and IRQ1 registered\n", COLOR_GREEN_ON_BLACK);
 }

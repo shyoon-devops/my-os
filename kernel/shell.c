@@ -1065,16 +1065,12 @@ static void shell_on_key(tty_key_t key) {
     }
 
     if (key == TTY_KEY_PAGE_UP) {
-        /*
-         * 다음 단계 Phase 5-D/5-E에서 console scrollback과 연결한다.
-         */
+        console_scroll_page_up();
         return;
     }
 
     if (key == TTY_KEY_PAGE_DOWN) {
-        /*
-         * 다음 단계 Phase 5-D/5-E에서 console scrollback과 연결한다.
-         */
+        console_scroll_page_down();
         return;
     }
 

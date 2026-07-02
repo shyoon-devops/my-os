@@ -4,9 +4,9 @@
 #include "types.h"
 
 #define CONSOLE_WIDTH  80
-#define CONSOLE_HEIGHT 25
+#define CONSOLE_HEIGHT 50
 
-#define CONSOLE_SCROLLBACK_LINES 256
+#define CONSOLE_SCROLLBACK_LINES 512
 
 #define VGA_COLOR(fg, bg) ((u8)((bg << 4) | (fg)))
 
@@ -44,13 +44,6 @@ u8 console_get_color(void);
 void console_set_cursor(u32 row, u32 col);
 void console_get_cursor(u32* row, u32* col);
 
-/*
- * Phase 5-D:
- *   scrollback buffer 기반 console backend.
- *
- * 이번 단계에서는 버퍼와 viewport 함수만 만든다.
- * PageUp/PageDown 키 연결은 다음 Phase 5-E에서 한다.
- */
 void console_scroll_page_up(void);
 void console_scroll_page_down(void);
 void console_scroll_to_bottom(void);
@@ -58,5 +51,8 @@ void console_scroll_to_bottom(void);
 u32 console_is_scrolled(void);
 u32 console_scrollback_count(void);
 u32 console_viewport_offset(void);
+
+u32 console_width(void);
+u32 console_height(void);
 
 #endif

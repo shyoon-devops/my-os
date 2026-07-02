@@ -25,20 +25,6 @@ static u32 str_equal(const char* a, const char* b) {
     return *a == '\0' && *b == '\0';
 }
 
-static u64 str_len(const char* s) {
-    u64 len = 0;
-
-    if (!s) {
-        return 0;
-    }
-
-    while (s[len]) {
-        len++;
-    }
-
-    return len;
-}
-
 static u32 is_space(char c) {
     return c == ' ' || c == '\t';
 }

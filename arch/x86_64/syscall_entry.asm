@@ -53,7 +53,12 @@ syscall_dispatch_return_user:
     mov rsi, rdi
     mov rdi, rax
 
+    ; SYS_read 같은 blocking syscall은 keyboard IRQ가 들어와야 깨어난다.
+    ; syscall_entry가 cli 상태로 dispatch하면 wait queue가 IRQ disabled 상태로
+    ; 잠들 수 있으므로, C syscall handler 실행 중에는 IRQ를 다시 켠다.
+    sti
     call syscall_dispatch
+    cli
 
     add rsp, 16
 
@@ -83,7 +88,9 @@ syscall_dispatch_exit:
     mov rsi, rdi
     mov rdi, rax
 
+    sti
     call syscall_dispatch
+    cli
 
     add rsp, 16
 

@@ -65,26 +65,26 @@ syscall_entry:
     ; kernel shell 복귀 신호로 사용한다.
     ;
     cmp r10, 60
-    je .return_to_kernel_shell
+    je syscall_exit_to_kernel_shell
 
     pop r11
     pop rcx
 
     sysretq
 
-.return_to_kernel_shell:
+syscall_exit_to_kernel_shell:
     ;
     ; 현재 rsp는 ring3 user stack이다.
     ; ring3_enter()가 저장해둔 kernel stack으로 돌아간다.
     ;
     mov rsp, [rel ring3_saved_kernel_rsp]
 
-    mov bx, 0x10
-    mov ds, bx
-    mov es, bx
-    mov fs, bx
-    mov gs, bx
-    mov ss, bx
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
 
     sti
 

@@ -14,6 +14,7 @@ ISO=$(BUILD_DIR)/my-os.iso
 
 INITRAMFS_TAR=$(BUILD_DIR)/initramfs.tar
 INITRAMFS_OBJECT=$(BUILD_DIR)/initramfs.o
+INITRAMFS_STAMP=$(BUILD_DIR)/.initramfs-prepared
 USER_INIT_ELF=$(INITRAMFS_DIR)/bin/init
 
 INITRAMFS_FILES=$(shell find $(INITRAMFS_DIR) -type f 2>/dev/null)
@@ -129,7 +130,7 @@ QEMU_COMMON=-cdrom $(ISO) \
 
 all: $(ISO)
 
-prepare-initramfs:
+$(INITRAMFS_STAMP):
 	mkdir -p $(INITRAMFS_DIR)/bin
 	mkdir -p $(INITRAMFS_DIR)/etc
 	@if [ ! -f $(INITRAMFS_DIR)/hello.txt ]; then \
@@ -141,12 +142,13 @@ prepare-initramfs:
 	@if [ ! -f $(INITRAMFS_DIR)/bin/README ]; then \
 	  printf 'This directory will later contain userland ELF binaries.\nFor now it is loaded from initramfs.\n' > $(INITRAMFS_DIR)/bin/README; \
 	fi
+	touch $(INITRAMFS_STAMP)
 
-$(USER_INIT_ELF): $(USER_DIR)/init.c $(USER_DIR)/linker.ld | prepare-initramfs
+$(USER_INIT_ELF): $(USER_DIR)/init.c $(USER_DIR)/linker.ld | $(INITRAMFS_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(USER_CFLAGS) $(USER_LDFLAGS) -o $@ $(USER_DIR)/init.c
 
-$(INITRAMFS_TAR): prepare-initramfs $(USER_INIT_ELF) $(INITRAMFS_FILES)
+$(INITRAMFS_TAR): $(USER_INIT_ELF) $(INITRAMFS_FILES) | $(INITRAMFS_STAMP)
 	mkdir -p $(@D)
 	tar --format=ustar -cf $(INITRAMFS_TAR) -C $(INITRAMFS_DIR) .
 
@@ -238,4 +240,4 @@ clean:
 	rm -rf iso
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 
-.PHONY: all prepare-initramfs check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean
+.PHONY: all check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean

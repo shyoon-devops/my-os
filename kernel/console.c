@@ -357,3 +357,45 @@ u32 console_width(void) {
 u32 console_height(void) {
     return CONSOLE_HEIGHT;
 }
+
+u32 console_get_cursor_row(void) {
+    return (u32)cursor_row;
+}
+
+u32 console_get_cursor_col(void) {
+    return (u32)cursor_col;
+}
+
+void console_set_cursor(u32 row, u32 col) {
+    if (row >= VGA_HEIGHT) {
+        row = VGA_HEIGHT - 1;
+    }
+
+    if (col >= VGA_WIDTH) {
+        col = VGA_WIDTH - 1;
+    }
+
+    cursor_row = row;
+    cursor_col = col;
+
+    console_update_cursor();
+}
+
+void console_clear_row(u32 row) {
+    if (row >= VGA_HEIGHT) {
+        return;
+    }
+
+    for (u32 col = 0; col < VGA_WIDTH; col++) {
+        VGA_MEMORY[row * VGA_WIDTH + col] =
+            vga_entry(' ', current_color);
+    }
+}
+
+u32 console_row_count(void) {
+    return VGA_HEIGHT;
+}
+
+u32 console_col_count(void) {
+    return VGA_WIDTH;
+}

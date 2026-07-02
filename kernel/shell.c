@@ -14,6 +14,9 @@
 #define SHELL_HISTORY_LINE_MAX SHELL_LINE_MAX
 
 static char line_buffer[SHELL_LINE_MAX];
+static u32 completion_list_visible = 0;
+static u32 completion_list_rows = 0;
+
 static u32 line_length = 0;
 static u32 cursor_index = 0;
 
@@ -116,6 +119,7 @@ static const char* shell_completion_commands[] = {
 #define SHELL_COMPLETION_COUNT \
     (sizeof(shell_completion_commands) / sizeof(shell_completion_commands[0]))
 
+static void shell_draw_prompt(void);
 static u32 shell_append_char(char* dst, u32* index, u32 dst_size, char c);
 static u32 shell_append_string(char* dst, u32* index, u32 dst_size, const char* src);
 static void shell_replace_line(const char* text);
@@ -211,6 +215,63 @@ static u32 shell_common_prefix_advanced(
     }
 
     return shell_strlen(common) > shell_strlen(prefix);
+}
+
+
+static void shell_forget_completion_list(void) {
+    completion_list_visible = 0;
+    completion_list_rows = 0;
+}
+
+static void shell_mark_completion_list(u32 rows) {
+    completion_list_visible = 1;
+    completion_list_rows = rows;
+}
+
+static void shell_clear_completion_list_if_visible(void) {
+    if (!completion_list_visible || completion_list_rows == 0) {
+        return;
+    }
+
+    u32 current_row = console_get_cursor_row();
+    u32 current_col = console_get_cursor_col();
+    u32 rows = completion_list_rows;
+
+    /*
+     * completion 출력 형태:
+     *
+     *   my-os> syscall
+     *
+     *     syscallinfo
+     *     syscalltest
+     *
+     *   my-os> syscall
+     *
+     * cursor는 마지막 prompt line에 있다.
+     * 따라서 위쪽 rows만큼 지우고 현재 prompt line을 다시 그린다.
+     */
+    if (current_row >= rows) {
+        u32 first_clear_row = current_row - rows;
+
+        for (u32 row = first_clear_row; row < current_row; row++) {
+            console_clear_row(row);
+        }
+
+        console_set_cursor(first_clear_row, 0);
+
+        /*
+         * 지운 영역 위에서 현재 입력 라인을 다시 그린다.
+         */
+        shell_draw_prompt();
+        print(line_buffer);
+
+        current_row = console_get_cursor_row();
+        current_col = console_get_cursor_col();
+        (void)current_row;
+        (void)current_col;
+    }
+
+    shell_forget_completion_list();
 }
 
 static void shell_replace_path_token_prefix(
@@ -620,23 +681,40 @@ static void shell_apply_completion(const char* command) {
 }
 
 static void shell_print_completion_matches(const char* prefix) {
-    char saved[SHELL_LINE_MAX];
+    u32 printed = 0;
 
-    shell_copy_line(saved, line_buffer, sizeof(saved));
-
-    console_put_char('\n');
+    print("\n");
 
     for (u32 i = 0; i < SHELL_COMPLETION_COUNT; i++) {
         const char* candidate = shell_completion_commands[i];
 
-        if (shell_starts_with(candidate, prefix)) {
-            print("  ");
-            print(candidate);
-            print("\n");
+        if (!shell_starts_with(candidate, prefix)) {
+            continue;
         }
+
+        print("  ");
+        print(candidate);
+        print("\n");
+
+        printed++;
     }
 
-    shell_reprint_prompt_with_line(saved);
+    shell_draw_prompt();
+    print(line_buffer);
+
+    if (printed > 0) {
+        /*
+         * 지워야 하는 row 수:
+         *   빈 줄 1개
+         *   후보 printed개
+         *
+         * 마지막 prompt line은 남겨두고 다시 그릴 것이므로 completion rows에는
+         * 후보 영역만 포함한다.
+         */
+        shell_mark_completion_list(printed + 1);
+    } else {
+        shell_forget_completion_list();
+    }
 }
 
 static void shell_complete_command(void) {
@@ -973,44 +1051,50 @@ static void shell_print_path_matches(
     const char* parent_path,
     const char* prefix
 ) {
-    if (!parent_path || !prefix) {
-        return;
-    }
-
     vfs_node_t* parent = vfs_lookup(parent_path);
 
     if (!parent || parent->type != VFS_NODE_DIR) {
         return;
     }
 
-    char saved[SHELL_LINE_MAX];
+    u32 printed = 0;
 
-    shell_copy_line(saved, line_buffer, sizeof(saved));
-
-    console_put_char('\n');
+    print("\n");
 
     vfs_node_t* child = parent->first_child;
 
     while (child) {
         if (shell_starts_with(child->name, prefix)) {
-            char path[SHELL_LINE_MAX];
+            print("  ");
 
-            if (shell_build_child_path(parent_path, child->name, path, sizeof(path))) {
-                print("  ");
-                print(path);
-
-                if (child->type == VFS_NODE_DIR) {
-                    print("/");
-                }
-
-                print("\n");
+            if (parent_path && parent_path[0] && !shell_streq(parent_path, "/")) {
+                print(parent_path);
+                print("/");
+            } else {
+                print("/");
             }
+
+            print(child->name);
+
+            if (child->type == VFS_NODE_DIR) {
+                print("/");
+            }
+
+            print("\n");
+            printed++;
         }
 
         child = child->next_sibling;
     }
 
-    shell_reprint_prompt_with_line(saved);
+    shell_draw_prompt();
+    print(line_buffer);
+
+    if (printed > 0) {
+        shell_mark_completion_list(printed + 1);
+    } else {
+        shell_forget_completion_list();
+    }
 }
 
 static u32 shell_complete_path(void) {
@@ -1195,6 +1279,11 @@ static void shell_on_char(char c) {
 }
 
 static void shell_on_key(tty_key_t key) {
+    if (key != TTY_KEY_TAB) {
+        shell_clear_completion_list_if_visible();
+    }
+
+
     if (key == TTY_KEY_LEFT) {
         shell_cursor_left();
         return;
@@ -1339,7 +1428,4 @@ void shell_start_task(void) {
         return;
     }
 
-    print("shell task created: ");
-    print_dec64(id);
-    print("\n");
 }

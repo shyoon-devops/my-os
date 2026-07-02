@@ -57,4 +57,12 @@ u32 console_viewport_offset(void);
 u32 console_width(void);
 u32 console_height(void);
 
+
+u32 console_get_cursor_row(void);
+u32 console_get_cursor_col(void);
+void console_set_cursor(u32 row, u32 col);
+void console_clear_row(u32 row);
+u32 console_row_count(void);
+u32 console_col_count(void);
+
 #endif

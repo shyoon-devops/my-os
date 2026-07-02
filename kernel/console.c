@@ -33,12 +33,10 @@ static u64 viewport_top = 0;
 
 static u8 current_color = COLOR_WHITE_ON_BLACK;
 
+static u8 vga_80x50_enabled = 0;
+
 static u64 min_u64(u64 a, u64 b) {
     return a < b ? a : b;
-}
-
-static u64 max_u64(u64 a, u64 b) {
-    return a > b ? a : b;
 }
 
 static u64 scrollback_oldest_line(void) {
@@ -74,6 +72,47 @@ static u16 vga_entry(char ch, u8 color) {
     return (u16)((u16)color << 8) | (u8)ch;
 }
 
+static u8 vga_crtc_read(u8 index) {
+    outb(VGA_CRTC_INDEX, index);
+    return inb(VGA_CRTC_DATA);
+}
+
+static void vga_crtc_write(u8 index, u8 value) {
+    outb(VGA_CRTC_INDEX, index);
+    outb(VGA_CRTC_DATA, value);
+}
+
+static void vga_enable_80x50_text_mode(void) {
+    if (vga_80x50_enabled) {
+        return;
+    }
+
+    /*
+     * VGA text mode 80x50:
+     *
+     * 기본 GRUB text mode는 보통 80x25, character cell height 16이다.
+     * CRTC Maximum Scan Line register의 character height를 8로 줄이면
+     * 같은 400 scanline 화면에서 50줄을 표시할 수 있다.
+     *
+     * register 0x09:
+     *   bits 0-4 = maximum scan line
+     *   7 means 8 scanlines per character cell.
+     *
+     * QEMU/일반 VGA 호환 환경에서는 이 최소 설정으로 80x50 표시가 된다.
+     */
+    u8 max_scanline = vga_crtc_read(0x09);
+    max_scanline = (u8)((max_scanline & 0xE0) | 0x07);
+    vga_crtc_write(0x09, max_scanline);
+
+    /*
+     * cursor shape도 8 scanline 문자 높이에 맞춘다.
+     */
+    vga_crtc_write(0x0A, 0x06);
+    vga_crtc_write(0x0B, 0x07);
+
+    vga_80x50_enabled = 1;
+}
+
 static void hardware_cursor_set(u32 row, u32 col) {
     if (row >= CONSOLE_HEIGHT) {
         row = CONSOLE_HEIGHT - 1;
@@ -85,11 +124,8 @@ static void hardware_cursor_set(u32 row, u32 col) {
 
     u16 pos = (u16)(row * CONSOLE_WIDTH + col);
 
-    outb(VGA_CRTC_INDEX, 0x0F);
-    outb(VGA_CRTC_DATA, (u8)(pos & 0xFF));
-
-    outb(VGA_CRTC_INDEX, 0x0E);
-    outb(VGA_CRTC_DATA, (u8)((pos >> 8) & 0xFF));
+    vga_crtc_write(0x0F, (u8)(pos & 0xFF));
+    vga_crtc_write(0x0E, (u8)((pos >> 8) & 0xFF));
 }
 
 static void render_viewport(void) {
@@ -151,6 +187,8 @@ static void move_to_next_line(void) {
 }
 
 void console_clear(void) {
+    vga_enable_80x50_text_mode();
+
     current_line = 0;
     current_col = 0;
     viewport_top = 0;
@@ -174,10 +212,6 @@ u8 console_get_color(void) {
 void console_put_char(char c) {
     /*
      * 현재는 입력/출력이 들어오면 항상 bottom view로 복귀시킨다.
-     *
-     * 다음 Phase 5-E에서 PageUp/PageDown을 붙일 때,
-     * "과거 로그를 보는 상태에서 키 입력 시 bottom 복귀" 정책을
-     * 더 명확히 다룰 수 있다.
      */
     viewport_top = scrollback_bottom_top();
 
@@ -340,4 +374,12 @@ u32 console_viewport_offset(void) {
     }
 
     return (u32)(bottom - viewport_top);
+}
+
+u32 console_width(void) {
+    return CONSOLE_WIDTH;
+}
+
+u32 console_height(void) {
+    return CONSOLE_HEIGHT;
 }

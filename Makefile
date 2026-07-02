@@ -15,7 +15,9 @@ ISO=$(BUILD_DIR)/my-os.iso
 INITRAMFS_TAR=$(BUILD_DIR)/initramfs.tar
 INITRAMFS_OBJECT=$(BUILD_DIR)/initramfs.o
 INITRAMFS_STAMP=$(BUILD_DIR)/.initramfs-prepared
-USER_INIT_ELF=$(INITRAMFS_DIR)/bin/init
+
+USER_PROGRAMS=init hello
+USER_ELFS=$(addprefix $(INITRAMFS_DIR)/bin/,$(USER_PROGRAMS))
 
 INITRAMFS_FILES=$(shell find $(INITRAMFS_DIR) -type f 2>/dev/null)
 
@@ -54,7 +56,8 @@ USER_CFLAGS=-std=gnu11 \
             -mno-sse2 \
             -Wall \
             -Wextra \
-            -O2
+            -O2 \
+            -I$(USER_DIR)
 
 USER_LDFLAGS=-nostdlib \
              -static \
@@ -145,11 +148,11 @@ $(INITRAMFS_STAMP):
 	fi
 	touch $(INITRAMFS_STAMP)
 
-$(USER_INIT_ELF): $(USER_DIR)/init.c $(USER_DIR)/linker.ld | $(INITRAMFS_STAMP)
+$(INITRAMFS_DIR)/bin/%: $(USER_DIR)/%.c $(USER_DIR)/syscall.h $(USER_DIR)/linker.ld | $(INITRAMFS_STAMP)
 	mkdir -p $(@D)
-	$(CC) $(USER_CFLAGS) $(USER_LDFLAGS) -o $@ $(USER_DIR)/init.c
+	$(CC) $(USER_CFLAGS) $(USER_LDFLAGS) -o $@ $<
 
-$(INITRAMFS_TAR): $(USER_INIT_ELF) $(INITRAMFS_FILES) | $(INITRAMFS_STAMP)
+$(INITRAMFS_TAR): $(USER_ELFS) $(INITRAMFS_FILES) | $(INITRAMFS_STAMP)
 	mkdir -p $(@D)
 	tar --format=ustar -cf $(INITRAMFS_TAR) -C $(INITRAMFS_DIR) .
 
@@ -228,7 +231,7 @@ git-status:
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(USER_INIT_ELF)
+	rm -f $(USER_ELFS)
 	rm -rf iso
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 

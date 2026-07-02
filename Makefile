@@ -7,6 +7,7 @@ BUILD_DIR=build
 ISO_DIR=$(BUILD_DIR)/iso
 INITRAMFS_DIR=initramfs
 USER_DIR=user
+ARCH_DIR=arch/x86_64
 
 KERNEL=$(BUILD_DIR)/kernel.elf
 ISO=$(BUILD_DIR)/my-os.iso
@@ -102,11 +103,13 @@ C_SOURCES= \
     kernel/utils.c
 
 ASM_SOURCES= \
-    kernel/interrupt.asm \
-    kernel/task_switch.asm \
-    kernel/syscall_entry.asm
+    $(ARCH_DIR)/interrupt.asm \
+    $(ARCH_DIR)/task_switch.asm \
+    $(ARCH_DIR)/syscall_entry.asm
 
-BOOT_OBJECT=$(BUILD_DIR)/boot.o
+BOOT_SOURCE=$(ARCH_DIR)/boot.asm
+BOOT_OBJECT=$(BUILD_DIR)/$(ARCH_DIR)/boot.o
+
 C_OBJECTS=$(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 ASM_OBJECTS=$(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
 
@@ -144,7 +147,7 @@ $(INITRAMFS_OBJECT): $(INITRAMFS_TAR)
 	mkdir -p $(@D)
 	$(LD) -r -b binary -o $(INITRAMFS_OBJECT) $(INITRAMFS_TAR)
 
-$(BOOT_OBJECT): boot.asm
+$(BOOT_OBJECT): $(BOOT_SOURCE)
 	mkdir -p $(@D)
 	$(ASM) -f elf64 $< -o $@
 
@@ -215,7 +218,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-09a] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-10a] your message"'; \
 	  exit 1; \
 	fi
 	git add --all

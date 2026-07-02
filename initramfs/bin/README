@@ -1,0 +1,2 @@
+This directory will later contain userland ELF binaries.
+For now it is loaded from initramfs.

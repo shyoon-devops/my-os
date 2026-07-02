@@ -4,6 +4,7 @@
 #include "fd.h"
 #include "heap.h"
 #include "idt.h"
+#include "initramfs.h"
 #include "irq.h"
 #include "keyboard.h"
 #include "klog.h"
@@ -109,6 +110,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     print("\n");
     ramfs_init();
 
+    print("\n");
+    initramfs_load();
+
     vfs_node_t* dev_dir = vfs_lookup("/dev");
 
     if (dev_dir) {
@@ -140,6 +144,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     vfs_register_builtin_commands();
     fd_register_builtin_commands();
     mouse_register_builtin_commands();
+    initramfs_register_builtin_commands();
 
     print("\n");
     pic_init();

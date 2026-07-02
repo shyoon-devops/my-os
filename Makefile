@@ -5,9 +5,14 @@ QEMU=qemu-system-x86_64
 
 BUILD_DIR=build
 ISO_DIR=$(BUILD_DIR)/iso
+INITRAMFS_DIR=initramfs
 
 KERNEL=$(BUILD_DIR)/kernel.elf
 ISO=$(BUILD_DIR)/my-os.iso
+
+INITRAMFS_TAR=$(BUILD_DIR)/initramfs.tar
+INITRAMFS_OBJECT=$(BUILD_DIR)/initramfs.o
+INITRAMFS_FILES=$(shell find $(INITRAMFS_DIR) -type f 2>/dev/null)
 
 GIT_MSG?=
 
@@ -63,6 +68,7 @@ C_SOURCES= \
     kernel/task.c \
     kernel/vfs.c \
     kernel/ramfs.c \
+    kernel/initramfs.c \
     kernel/fd.c \
     kernel/utils.c
 
@@ -83,6 +89,14 @@ QEMU_COMMON=-cdrom $(ISO) \
 
 all: $(ISO)
 
+$(INITRAMFS_TAR): $(INITRAMFS_FILES)
+	mkdir -p $(@D)
+	tar --format=ustar -cf $(INITRAMFS_TAR) -C $(INITRAMFS_DIR) .
+
+$(INITRAMFS_OBJECT): $(INITRAMFS_TAR)
+	mkdir -p $(@D)
+	$(LD) -r -b binary -o $(INITRAMFS_OBJECT) $(INITRAMFS_TAR)
+
 $(BOOT_OBJECT): boot.asm
 	mkdir -p $(@D)
 	$(ASM) -f elf64 $< -o $@
@@ -95,9 +109,9 @@ $(BUILD_DIR)/%.o: %.asm
 	mkdir -p $(@D)
 	$(ASM) -f elf64 $< -o $@
 
-$(KERNEL): $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) linker.ld
+$(KERNEL): $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT) linker.ld
 	mkdir -p $(@D)
-	$(LD) $(LDFLAGS) -o $(KERNEL) $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS)
+	$(LD) $(LDFLAGS) -o $(KERNEL) $(BOOT_OBJECT) $(C_OBJECTS) $(ASM_OBJECTS) $(INITRAMFS_OBJECT)
 
 $(ISO): $(KERNEL) grub.cfg
 	mkdir -p $(ISO_DIR)/boot/grub
@@ -146,7 +160,7 @@ git-status:
 
 commit:
 	@if [ -z "$(GIT_MSG)" ]; then \
-	  echo 'Usage: make commit GIT_MSG="[phase-05g] your message"'; \
+	  echo 'Usage: make commit GIT_MSG="[phase-07] your message"'; \
 	  exit 1; \
 	fi
 	git add --all

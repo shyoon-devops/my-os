@@ -16,6 +16,13 @@ vfs_node_t* ramfs_create_file(
     const char* content
 );
 
+vfs_node_t* ramfs_create_file_from_buffer(
+    vfs_node_t* parent,
+    const char* name,
+    const void* data,
+    u64 size
+);
+
 vfs_node_t* ramfs_create_device(
     vfs_node_t* parent,
     const char* name,

@@ -205,10 +205,11 @@ vfs_node_t* ramfs_create_dir(vfs_node_t* parent, const char* name) {
     return node;
 }
 
-vfs_node_t* ramfs_create_file(
+vfs_node_t* ramfs_create_file_from_buffer(
     vfs_node_t* parent,
     const char* name,
-    const char* content
+    const void* data,
+    u64 size
 ) {
     vfs_node_t* node = ramfs_alloc_node(name, VFS_NODE_FILE);
 
@@ -216,22 +217,18 @@ vfs_node_t* ramfs_create_file(
         return 0;
     }
 
-    if (content) {
-        u64 len = ramfs_strlen(content);
+    if (data && size > 0) {
+        u8* file_data = (u8*)kmalloc(size);
 
-        if (len > 0) {
-            u8* data = (u8*)kmalloc(len);
-
-            if (!data) {
-                return 0;
-            }
-
-            ramfs_memcpy(data, content, len);
-
-            node->data = data;
-            node->size = len;
-            node->capacity = len;
+        if (!file_data) {
+            return 0;
         }
+
+        ramfs_memcpy(file_data, data, size);
+
+        node->data = file_data;
+        node->size = size;
+        node->capacity = size;
     }
 
     if (parent) {
@@ -239,6 +236,16 @@ vfs_node_t* ramfs_create_file(
     }
 
     return node;
+}
+
+vfs_node_t* ramfs_create_file(
+    vfs_node_t* parent,
+    const char* name,
+    const char* content
+) {
+    u64 len = ramfs_strlen(content);
+
+    return ramfs_create_file_from_buffer(parent, name, content, len);
 }
 
 vfs_node_t* ramfs_create_device(
@@ -273,26 +280,8 @@ void ramfs_init(void) {
         return;
     }
 
-    vfs_node_t* bin = ramfs_create_dir(root_node, "bin");
-    vfs_node_t* dev = ramfs_create_dir(root_node, "dev");
-    vfs_node_t* etc = ramfs_create_dir(root_node, "etc");
-    vfs_node_t* tmp = ramfs_create_dir(root_node, "tmp");
-
-    (void)bin;
-    (void)dev;
-    (void)tmp;
-
-    ramfs_create_file(
-        root_node,
-        "hello.txt",
-        "hello from my-os ramfs\n"
-    );
-
-    ramfs_create_file(
-        etc,
-        "motd",
-        "welcome to my-os\n"
-    );
+    ramfs_create_dir(root_node, "dev");
+    ramfs_create_dir(root_node, "tmp");
 
     vfs_init(root_node);
 

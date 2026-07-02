@@ -149,6 +149,16 @@ static s8 mouse_decode_wheel(u8 raw) {
     return value;
 }
 
+static void print_s32(s32 value) {
+    if (value < 0) {
+        print("-");
+        print_dec64((u64)(-value));
+        return;
+    }
+
+    print_dec64((u64)value);
+}
+
 static void mouse_handle_packet(void) {
     packets_received++;
 
@@ -173,10 +183,22 @@ static void mouse_handle_packet(void) {
     wheel_position += wheel;
     wheel_events++;
 
+    /*
+     * Phase 7 preparation:
+     *   macOS 자연 스크롤 감각에 맞춰 기존 방향을 반대로 둔다.
+     *
+     * 이전:
+     *   wheel > 0 -> line up
+     *   wheel < 0 -> line down
+     *
+     * 현재:
+     *   wheel > 0 -> line down
+     *   wheel < 0 -> line up
+     */
     if (wheel > 0) {
-        console_scroll_line_up();
-    } else {
         console_scroll_line_down();
+    } else {
+        console_scroll_line_up();
     }
 }
 
@@ -189,18 +211,8 @@ void mouse_init(void) {
     wheel_events = 0;
     wheel_position = 0;
 
-    /*
-     * PS/2 auxiliary device(mouse) enable.
-     */
     ps2_write_command(PS2_CMD_ENABLE_AUX);
 
-    /*
-     * Controller config byte:
-     *   bit 1 = enable IRQ12
-     *   bit 5 = disable mouse clock
-     *
-     * bit 1을 켜고 bit 5를 끈다.
-     */
     ps2_write_command(PS2_CMD_READ_CONFIG);
     u8 config = ps2_read_data();
 
@@ -216,10 +228,6 @@ void mouse_init(void) {
 
     irq_register_handler(12, mouse_on_irq);
 
-    /*
-     * IRQ12는 slave PIC에 있고, slave PIC는 master IRQ2 뒤에 있다.
-     * 따라서 IRQ2와 IRQ12 둘 다 열어둔다.
-     */
     pic_clear_mask(2);
     pic_clear_mask(12);
 
@@ -248,10 +256,6 @@ void mouse_on_irq(void) {
 
     u8 data = inb(PS2_DATA_PORT);
 
-    /*
-     * packet 첫 byte는 bit3이 항상 1이다.
-     * 중간에 동기화가 깨졌으면 첫 byte를 다시 찾는다.
-     */
     if (mouse_packet_index == 0 && (data & 0x08) == 0) {
         return;
     }
@@ -297,8 +301,10 @@ static void cmd_mouseinfo(const char* args) {
     print("\n");
 
     print("mouse wheel position = ");
-    print_dec64((u64)wheel_position);
+    print_s32(wheel_position);
     print("\n");
+
+    print("mouse scroll direction = natural\n");
 }
 
 void mouse_register_builtin_commands(void) {

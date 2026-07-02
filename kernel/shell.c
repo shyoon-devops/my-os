@@ -98,7 +98,9 @@ static const char* shell_completion_commands[] = {
     "fdcat",
     "fdwrite",
 
-    "history"
+    "history",
+    "mouseinfo",
+    "initramfsinfo"
 };
 
 #define SHELL_COMPLETION_COUNT \

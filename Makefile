@@ -250,7 +250,6 @@ commit:
 	else \
 		git commit -m "$(GIT_MSG)"; \
 	fi
-	@$(MAKE) push-remotes
 
 push-remotes:
 	@branch="$$(git branch --show-current)"; \

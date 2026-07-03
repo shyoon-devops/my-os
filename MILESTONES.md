@@ -72,19 +72,16 @@ GRUB
 
 > 교훈: SYSCALL은 RSP를 kernel stack으로 자동 전환하지 않는다. 그리고 user program이 shell task 안에서 돌면 blocking/exit 복귀가 전부 꼬인다.
 
-## 🔥 M1. user task/process 경계 안정화 — 현재 (phase-10l)
+## ✅ M1. user task/process 경계 안정화 (phase-10l)
 
-가장 의심해야 할 다음 구조 문제: **`ring3_saved_kernel_rsp`가 전역 하나다** (`arch/x86_64/ring3_switch.asm`). user task가 하나일 때만 간신히 맞는 구조.
+- [x] `ring3_saved_kernel_rsp` 전역 제거 — `ring3_enter(rip, rsp, slot)`이 현재 task의 `user_context.saved_kernel_rsp`에 저장
+- [x] SYS_exit이 `task_user_saved_kernel_rsp()` C 헬퍼로 현재 task의 복귀 지점 조회
+- [x] SYS_exit 복귀 안정화 — ring3_enter가 callee-saved 레지스터(rbx, rbp, r12-r15) 보존, 빈 컨텍스트 가드 추가
+- [x] blocking read가 user task만 재우는지 재검증 (QEMU 검수 통과)
 
-- [ ] `ring3_saved_kernel_rsp` 전역 제거 또는 최소화 — per-task/per-exec context로 이동
-  - `ring3_enter_ex(user_rip, user_rsp, saved_rsp_slot)` 또는 `current_task()->user_context.saved_kernel_rsp` 조회
-- [ ] user_exec_ctx 정리: saved_kernel_rsp / user_rsp / user_rip / exit_code / status
-- [ ] SYS_exit 복귀 안정화
-- [ ] blocking read가 정확히 user task만 재우는지 재검증
+**완료 기준 충족**: 여러 user task가 순차 실행되어도 SYS_exit 복귀가 깨지지 않음.
 
-**완료 기준**: 여러 user task가 순차 실행되어도 SYS_exit 복귀가 깨지지 않음.
-
-## 📋 M2. Process struct 도입
+## 🔥 M2. Process struct 도입 — 현재 (phase-11)
 
 task(커널 스케줄링 단위)와 process(user 프로그램 실행 단위)를 분리한다. 초기에는 task 1개 = process 1개.
 

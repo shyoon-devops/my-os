@@ -17,6 +17,7 @@
 #include "pit.h"
 #include "pmm.h"
 #include "print.h"
+#include "process.h"
 #include "ramfs.h"
 #include "rtc.h"
 #include "serial.h"
@@ -113,6 +114,9 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     task_init();
 
     print("\n");
+    process_init();
+
+    print("\n");
     tty_init();
 
     print("\n");
@@ -158,6 +162,7 @@ void kernel_main(u32 magic, u64 mb2_info_addr) {
     timer_register_builtin_commands();
     rtc_register_builtin_commands();
     task_register_builtin_commands();
+    process_register_builtin_commands();
     vfs_register_builtin_commands();
     fd_register_builtin_commands();
     mouse_register_builtin_commands();

@@ -56,6 +56,12 @@ struct task;
 struct task* task_current(void);
 
 /*
+ * 현재 task의 id. current task가 없으면 0.
+ * process 모듈이 task와 process를 연결할 때 쓴다.
+ */
+u32 task_current_id(void);
+
+/*
  * 현재 task의 ring3 컨텍스트. current task가 없으면 0.
  */
 task_user_context_t* task_current_user_context(void);

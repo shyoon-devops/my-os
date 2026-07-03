@@ -381,6 +381,14 @@ struct task* task_current(void) {
     return current_task;
 }
 
+u32 task_current_id(void) {
+    if (!current_task) {
+        return 0;
+    }
+
+    return current_task->id;
+}
+
 task_user_context_t* task_current_user_context(void) {
     if (!current_task) {
         return 0;

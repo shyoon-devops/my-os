@@ -98,6 +98,7 @@ C_SOURCES= \
     kernel/timer.c \
     kernel/rtc.c \
     kernel/task.c \
+    kernel/process.c \
     kernel/vfs.c \
     kernel/ramfs.c \
     kernel/initramfs.c \

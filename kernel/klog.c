@@ -47,17 +47,6 @@ void klog_write_char(char c) {
     spin_unlock_irqrestore(&klog_lock, flags);
 }
 
-void klog_write_string(const char* s) {
-    if (!s) {
-        return;
-    }
-
-    while (*s) {
-        klog_write_char(*s);
-        s++;
-    }
-}
-
 void klog_clear(void) {
     u64 flags;
 

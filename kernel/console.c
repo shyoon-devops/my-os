@@ -217,17 +217,6 @@ void console_put_char(char c) {
     render_viewport();
 }
 
-void console_write(const char* s) {
-    if (!s) {
-        return;
-    }
-
-    while (*s) {
-        console_put_char(*s);
-        s++;
-    }
-}
-
 void console_set_cursor(u32 row, u32 col) {
     if (row >= CONSOLE_HEIGHT) {
         row = CONSOLE_HEIGHT - 1;
@@ -323,38 +312,5 @@ void console_scroll_line_down(void) {
 
     viewport_top++;
     render_viewport();
-}
-
-void console_scroll_to_bottom(void) {
-    viewport_top = scrollback_bottom_top();
-    render_viewport();
-}
-
-u32 console_is_scrolled(void) {
-    return viewport_top != scrollback_bottom_top();
-}
-
-u32 console_scrollback_count(void) {
-    u64 count = current_line + 1;
-
-    return (u32)min_u64(count, CONSOLE_SCROLLBACK_LINES);
-}
-
-u32 console_viewport_offset(void) {
-    u64 bottom = scrollback_bottom_top();
-
-    if (viewport_top >= bottom) {
-        return 0;
-    }
-
-    return (u32)(bottom - viewport_top);
-}
-
-u32 console_width(void) {
-    return CONSOLE_WIDTH;
-}
-
-u32 console_height(void) {
-    return CONSOLE_HEIGHT;
 }
 

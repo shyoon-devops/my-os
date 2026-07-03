@@ -100,10 +100,6 @@ void serial_register_device(void) {
     (void)serial_device;
 }
 
-u32 serial_is_initialized(void) {
-    return serial_initialized;
-}
-
 void serial_write_char(char c) {
     if (!serial_initialized) {
         return;
@@ -117,15 +113,4 @@ void serial_write_char(char c) {
     }
 
     serial_write_raw_char(c);
-}
-
-void serial_write_string(const char* s) {
-    if (!s) {
-        return;
-    }
-
-    while (*s) {
-        serial_write_char(*s);
-        s++;
-    }
 }

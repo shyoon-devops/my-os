@@ -426,18 +426,6 @@ void initramfs_load(void) {
     print("\n");
 }
 
-u32 initramfs_loaded_file_count(void) {
-    return loaded_files;
-}
-
-u32 initramfs_loaded_dir_count(void) {
-    return loaded_dirs;
-}
-
-u64 initramfs_loaded_byte_count(void) {
-    return loaded_bytes;
-}
-
 static void cmd_initramfsinfo(const char* args) {
     (void)args;
 

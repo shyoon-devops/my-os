@@ -6,9 +6,6 @@
 void serial_init(void);
 void serial_register_device(void);
 
-u32 serial_is_initialized(void);
-
 void serial_write_char(char c);
-void serial_write_string(const char* s);
 
 #endif

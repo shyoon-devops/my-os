@@ -43,8 +43,6 @@ u64 syscall_dispatch(
     u64 arg5
 );
 
-u64 syscall_take_user_exit_code(void);
-
 void syscall_register_builtin_commands(void);
 
 #endif

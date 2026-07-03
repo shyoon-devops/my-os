@@ -223,9 +223,6 @@ run-curses-serial-log: require-iso
 	  -display curses \
 	  -serial file:serial.log
 
-rename:
-	./scripts/rename-my-os.sh
-
 git-status:
 	git status --short
 
@@ -235,7 +232,7 @@ clean:
 	rm -rf iso
 	rm -f boot.o kernel/*.o kernel.elf os.iso my-os.iso serial.log
 
-.PHONY: all check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log rename git-status commit clean
+.PHONY: all check require-iso run run-curses run-cocoa run-cocoa-full run-cocoa-serial run-curses-serial-log git-status commit clean
 
 .PHONY: commit push-remotes
 

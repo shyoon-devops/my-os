@@ -3,7 +3,6 @@
 
 #include "types.h"
 
-void kernel_panic(const char* message);
 void kernel_panic_at(const char* message, const char* file, u64 line);
 void kernel_panic_assert(const char* expr, const char* file, u64 line);
 void kernel_panic_halt(void);

@@ -898,14 +898,6 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-void shell_poll(void) {
-    tty_key_t key;
-
-    while (tty_read_key(&key)) {
-        shell_on_key(key);
-    }
-}
-
 static void shell_task(void* arg) {
     (void)arg;
 

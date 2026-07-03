@@ -8,7 +8,6 @@
 void klog_init(void);
 
 void klog_write_char(char c);
-void klog_write_string(const char* s);
 
 void klog_dump(void);
 void klog_clear(void);

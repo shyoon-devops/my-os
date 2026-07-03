@@ -10,12 +10,6 @@ vfs_node_t* ramfs_root(void);
 
 vfs_node_t* ramfs_create_dir(vfs_node_t* parent, const char* name);
 
-vfs_node_t* ramfs_create_file(
-    vfs_node_t* parent,
-    const char* name,
-    const char* content
-);
-
 vfs_node_t* ramfs_create_file_from_buffer(
     vfs_node_t* parent,
     const char* name,

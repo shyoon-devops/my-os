@@ -64,37 +64,3 @@ void pit_on_tick(void) {
 u64 pit_get_ticks(void) {
     return pit_ticks;
 }
-
-void pit_wait_ticks(u64 ticks) {
-    u64 target = pit_ticks + ticks;
-
-    while (pit_ticks < target) {
-        __asm__ volatile ("hlt");
-    }
-}
-
-void pit_test(void) {
-    print_color("[PIT timer test]\n", COLOR_YELLOW_ON_BLACK);
-
-    u64 before = pit_get_ticks();
-
-    print("ticks before = ");
-    print_dec64(before);
-    print("\n");
-
-    print("waiting 5 timer ticks...\n");
-
-    pit_wait_ticks(5);
-
-    u64 after = pit_get_ticks();
-
-    print("ticks after  = ");
-    print_dec64(after);
-    print("\n");
-
-    if (after >= before + 5) {
-        print_color("PIT timer OK\n", COLOR_GREEN_ON_BLACK);
-    } else {
-        print_color("PIT timer FAILED\n", COLOR_RED_ON_BLACK);
-    }
-}

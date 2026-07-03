@@ -73,34 +73,6 @@ void syscall_cpu_init(void) {
     print_color("Syscall CPU entry configured\n", COLOR_GREEN_ON_BLACK);
 }
 
-u32 syscall_cpu_enabled(void) {
-    return cpu_syscall_enabled;
-}
-
-u64 syscall_cpu_entry_address(void) {
-    return (u64)syscall_entry;
-}
-
-u64 syscall_cpu_efer_before(void) {
-    return saved_efer_before;
-}
-
-u64 syscall_cpu_efer_after(void) {
-    return saved_efer_after;
-}
-
-u64 syscall_cpu_star(void) {
-    return saved_star;
-}
-
-u64 syscall_cpu_lstar(void) {
-    return saved_lstar;
-}
-
-u64 syscall_cpu_fmask(void) {
-    return saved_fmask;
-}
-
 static void cmd_syscallcpuinfo(const char* args) {
     (void)args;
 

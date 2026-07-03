@@ -35,6 +35,5 @@ void wait_queue_block_irqrestore(wait_queue_t* queue, u64 irq_flags);
 
 u32 wait_queue_wake_one(wait_queue_t* queue);
 u32 wait_queue_wake_all(wait_queue_t* queue);
-u32 wait_queue_is_empty(wait_queue_t* queue);
 
 #endif

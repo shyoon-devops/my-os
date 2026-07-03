@@ -14,23 +14,6 @@ void wait_queue_init(wait_queue_t* queue) {
     spinlock_init(&queue->lock);
 }
 
-u32 wait_queue_is_empty(wait_queue_t* queue) {
-    if (!queue) {
-        return 1;
-    }
-
-    u64 flags;
-    u32 empty;
-
-    spin_lock_irqsave(&queue->lock, &flags);
-
-    empty = queue->head == 0;
-
-    spin_unlock_irqrestore(&queue->lock, flags);
-
-    return empty;
-}
-
 void wait_queue_block_irqrestore(wait_queue_t* queue, u64 irq_flags) {
     if (!queue) {
         irq_restore(irq_flags);

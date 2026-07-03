@@ -93,28 +93,6 @@ u32 tty_push_char(char c) {
     return tty_push_key((tty_key_t)(u8)c);
 }
 
-u32 tty_read_key(tty_key_t* out) {
-    if (!out) {
-        return 0;
-    }
-
-    u64 flags;
-    u32 result = 1;
-
-    spin_lock_irqsave(&tty_lock, &flags);
-
-    if (tty_tail == tty_head) {
-        result = 0;
-    } else {
-        *out = tty_buffer[tty_tail];
-        tty_tail = next_index(tty_tail);
-    }
-
-    spin_unlock_irqrestore(&tty_lock, flags);
-
-    return result;
-}
-
 void tty_read_key_blocking(tty_key_t* out) {
     if (!out) {
         return;
@@ -138,23 +116,6 @@ void tty_read_key_blocking(tty_key_t* out) {
 
         wait_queue_block_irqrestore(&tty_wait_queue, flags);
     }
-}
-
-u32 tty_available(void) {
-    u64 flags;
-    u32 available;
-
-    spin_lock_irqsave(&tty_lock, &flags);
-
-    if (tty_head >= tty_tail) {
-        available = tty_head - tty_tail;
-    } else {
-        available = TTY_BUFFER_SIZE - tty_tail + tty_head;
-    }
-
-    spin_unlock_irqrestore(&tty_lock, flags);
-
-    return available;
 }
 
 u64 tty_vfs_read(vfs_node_t* node, u64 offset, void* buffer, u64 size) {

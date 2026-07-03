@@ -179,14 +179,6 @@ device_t* device_register(
     return dev;
 }
 
-void device_set_state(device_t* dev, device_state_t state) {
-    if (!dev) {
-        return;
-    }
-
-    dev->state = state;
-}
-
 u32 device_count(void) {
     return registered_device_count;
 }

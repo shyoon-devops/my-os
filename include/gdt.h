@@ -20,8 +20,6 @@ void gdt_init(void);
 
 u64 gdt_kernel_stack_top(void);
 u64 gdt_tss_rsp0(void);
-u64 gdt_base_address(void);
-u16 gdt_limit(void);
 
 void gdt_register_builtin_commands(void);
 

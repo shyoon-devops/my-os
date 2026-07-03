@@ -36,7 +36,6 @@
 void console_clear(void);
 
 void console_put_char(char c);
-void console_write(const char* s);
 
 void console_set_color(u8 color);
 u8 console_get_color(void);
@@ -48,14 +47,6 @@ void console_scroll_page_up(void);
 void console_scroll_page_down(void);
 void console_scroll_line_up(void);
 void console_scroll_line_down(void);
-void console_scroll_to_bottom(void);
-
-u32 console_is_scrolled(void);
-u32 console_scrollback_count(void);
-u32 console_viewport_offset(void);
-
-u32 console_width(void);
-u32 console_height(void);
 
 
 void console_set_cursor(u32 row, u32 col);

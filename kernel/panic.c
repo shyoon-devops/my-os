@@ -38,10 +38,6 @@ static void panic_begin(void) {
     panic_active = 1;
 }
 
-void kernel_panic(const char* message) {
-    kernel_panic_at(message, 0, 0);
-}
-
 void kernel_panic_at(const char* message, const char* file, u64 line) {
     panic_begin();
 

@@ -8,20 +8,6 @@
 static vfs_node_t* root_node = 0;
 static u32 next_node_id = 1;
 
-static u64 ramfs_strlen(const char* s) {
-    u64 len = 0;
-
-    if (!s) {
-        return 0;
-    }
-
-    while (s[len]) {
-        len++;
-    }
-
-    return len;
-}
-
 static void ramfs_memcpy(void* dst, const void* src, u64 size) {
     u8* d = (u8*)dst;
     const u8* s = (const u8*)src;
@@ -236,16 +222,6 @@ vfs_node_t* ramfs_create_file_from_buffer(
     }
 
     return node;
-}
-
-vfs_node_t* ramfs_create_file(
-    vfs_node_t* parent,
-    const char* name,
-    const char* content
-) {
-    u64 len = ramfs_strlen(content);
-
-    return ramfs_create_file_from_buffer(parent, name, content, len);
 }
 
 vfs_node_t* ramfs_create_device(

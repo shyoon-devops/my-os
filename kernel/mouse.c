@@ -269,18 +269,6 @@ void mouse_on_irq(void) {
     }
 }
 
-u32 mouse_packet_count(void) {
-    return packets_received;
-}
-
-u32 mouse_wheel_event_count(void) {
-    return wheel_events;
-}
-
-s32 mouse_wheel_position(void) {
-    return wheel_position;
-}
-
 static void cmd_mouseinfo(const char* args) {
     (void)args;
 

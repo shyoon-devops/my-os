@@ -150,14 +150,6 @@ u64 gdt_tss_rsp0(void) {
     return tss.rsp0;
 }
 
-u64 gdt_base_address(void) {
-    return gdt_descriptor.base;
-}
-
-u16 gdt_limit(void) {
-    return gdt_descriptor.limit;
-}
-
 static void cmd_gdtinfo(const char* args) {
     (void)args;
 

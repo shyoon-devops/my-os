@@ -174,16 +174,6 @@ u64 syscall_dispatch(
     return SYSCALL_ERR_INVAL;
 }
 
-u64 syscall_take_user_exit_code(void) {
-    if (!user_exit_requested) {
-        return SYSCALL_NO_USER_EXIT;
-    }
-
-    user_exit_requested = 0;
-
-    return user_exit_code;
-}
-
 static void print_syscall_result(u64 value) {
     if (value == SYSCALL_ERR_INVAL) {
         print("ERR_INVAL");

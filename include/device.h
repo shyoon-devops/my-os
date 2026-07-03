@@ -44,8 +44,6 @@ device_t* device_register(
 
 device_t* device_find(const char* name);
 
-void device_set_state(device_t* dev, device_state_t state);
-
 u32 device_count(void);
 void device_print_all(void);
 

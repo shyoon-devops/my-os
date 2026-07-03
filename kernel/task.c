@@ -27,6 +27,8 @@ typedef struct task {
     task_entry_t entry;
     void* arg;
 
+    task_user_context_t user_context;
+
     struct task* next;
     struct task* wait_next;
 } task_t;
@@ -377,6 +379,26 @@ void task_exit(void) {
  */
 struct task* task_current(void) {
     return current_task;
+}
+
+task_user_context_t* task_current_user_context(void) {
+    if (!current_task) {
+        return 0;
+    }
+
+    return &current_task->user_context;
+}
+
+/*
+ * syscall_entry.asm의 SYS_exit 경로에서 IRQ가 꺼진 상태로 호출된다.
+ * 단일 CPU + cli 상태이므로 lock 없이 current_task를 읽어도 안전하다.
+ */
+u64 task_user_saved_kernel_rsp(void) {
+    if (!current_task) {
+        return 0;
+    }
+
+    return current_task->user_context.saved_kernel_rsp;
 }
 
 void task_set_waiting(struct task* task) {

@@ -44,3 +44,5 @@ qemu.log
 
 # Claude / AI local workspace noise
 .claude/
+CLAUDE.md
+.playwright-mcp/

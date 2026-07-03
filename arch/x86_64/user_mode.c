@@ -19,7 +19,7 @@
 #define USER_EXEC_STACK_TOP 0x0000000070000000ULL
 #define USER_EXEC_STACK_BOTTOM (USER_EXEC_STACK_TOP - USER_EXEC_STACK_SIZE)
 
-extern u64 ring3_enter(u64 user_rip, u64 user_rsp);
+extern u64 ring3_enter(u64 user_rip, u64 user_rsp, u64* saved_kernel_rsp_slot);
 extern void ring3_user_entry(void);
 extern u8 ring3_user_blob_start[];
 extern u8 ring3_user_blob_end[];
@@ -442,8 +442,27 @@ static s32 run_path(const char* path, u64* out_exit_code) {
     u64 entry = ehdr->e_entry;
     kfree(file);
 
+    task_user_context_t* uctx = task_current_user_context();
+
+    if (!uctx) {
+        print("run_path: no current task for ring3 enter\n");
+        unmap_range(USER_EXEC_STACK_BOTTOM, USER_EXEC_STACK_SIZE);
+
+        if (mapped_begin != 0 && mapped_end > mapped_begin) {
+            unmap_range(mapped_begin, mapped_end - mapped_begin);
+        }
+
+        return -1;
+    }
+
     print("entering user ELF...\n");
-    u64 exit_code = ring3_enter(entry, USER_EXEC_STACK_TOP);
+    u64 exit_code = ring3_enter(entry, USER_EXEC_STACK_TOP, &uctx->saved_kernel_rsp);
+
+    /*
+     * 복귀 후 슬롯을 비워서, ring3_enter 없이 들어온 SYS_exit이
+     * 낡은 rsp로 복귀하지 못하게 한다.
+     */
+    uctx->saved_kernel_rsp = 0;
 
     unmap_range(USER_EXEC_STACK_BOTTOM, USER_EXEC_STACK_SIZE);
 
@@ -622,8 +641,20 @@ static void cmd_ring3test(const char* args) {
         return;
     }
 
+    task_user_context_t* uctx = task_current_user_context();
+
+    if (!uctx) {
+        print("ring3test: no current task\n");
+        return;
+    }
+
     print("entering ring3...\n");
-    u64 exit_code = ring3_enter(user_mode_entry_address(), user_mode_stack_top());
+    u64 exit_code = ring3_enter(
+        user_mode_entry_address(),
+        user_mode_stack_top(),
+        &uctx->saved_kernel_rsp
+    );
+    uctx->saved_kernel_rsp = 0;
     print("returned from ring3\n");
     print("exit code = ");
     print_dec64(exit_code);

@@ -2,29 +2,36 @@ bits 64
 
 global ring3_enter
 global ring3_user_entry
-global ring3_saved_kernel_rsp
 global ring3_user_blob_start
 global ring3_user_blob_end
-
-section .data
-
-ring3_saved_kernel_rsp:
-    dq 0
 
 section .text
 
 ;
-; u64 ring3_enter(u64 user_rip, u64 user_rsp);
+; u64 ring3_enter(u64 user_rip, u64 user_rsp, u64* saved_kernel_rsp_slot);
 ;
 ; rdi = user RIP
 ; rsi = user RSP
+; rdx = 커널 rsp를 저장할 슬롯 (현재 task의 user_context.saved_kernel_rsp)
 ;
 ; 이 함수는 iretq로 ring3에 진입한다.
 ; ring3에서 SYS_exit을 호출하면 syscall_entry.asm이
-; ring3_saved_kernel_rsp로 커널 스택을 복구하고 ret로 돌아온다.
+; 현재 task의 saved_kernel_rsp로 커널 스택을 복구하고,
+; 아래에서 push한 callee-saved 레지스터를 pop한 뒤 ret로 돌아온다.
+;
+; callee-saved 레지스터를 push해 두는 이유:
+; user 코드가 rbx/rbp/r12~r15를 마음대로 쓰기 때문에,
+; 보존하지 않으면 SYS_exit 복귀 후 C 호출자의 레지스터가 깨진다.
 ;
 ring3_enter:
-    mov [rel ring3_saved_kernel_rsp], rsp
+    push rbx
+    push rbp
+    push r12
+    push r13
+    push r14
+    push r15
+
+    mov [rdx], rsp
 
     ;
     ; ring3 data selector

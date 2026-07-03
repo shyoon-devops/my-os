@@ -3,7 +3,7 @@ bits 64
 global syscall_entry
 
 extern syscall_dispatch
-extern ring3_saved_kernel_rsp
+extern task_user_saved_kernel_rsp
 
 section .bss
 align 16
@@ -75,9 +75,19 @@ syscall_after_dispatch:
     push qword [rel syscall_user_rip]
     iretq
 
+;
+; SYS_exit:
+;   현재 task의 saved_kernel_rsp(ring3_enter가 저장)로 커널 스택을 복구하고
+;   ring3_enter가 push해 둔 callee-saved 레지스터를 pop한 뒤
+;   ring3_enter의 호출자로 ret한다. 반환값(rax) = exit code.
+;
 syscall_exit_direct:
-    mov rax, rdi
-    mov rsp, [rel ring3_saved_kernel_rsp]
+    ;
+    ; rbx에 exit code를 보존한다.
+    ; 아래에서 저장된 커널 프레임의 pop rbx로 원래 값이 복구되므로
+    ; 여기서 rbx를 잠시 써도 안전하다.
+    ;
+    mov rbx, rdi
 
     mov dx, 0x10
     mov ds, dx
@@ -86,5 +96,33 @@ syscall_exit_direct:
     mov gs, dx
     mov ss, dx
 
+    ;
+    ; C 헬퍼 호출을 위해 syscall 커널 스택으로 전환한다.
+    ; (아직 user rsp 상태이므로 이 전환 없이는 C를 부를 수 없다)
+    ;
+    lea rsp, [rel syscall_stack_top]
+    call task_user_saved_kernel_rsp
+
+    test rax, rax
+    jz .no_user_context
+
+    mov rsp, rax
+    mov rax, rbx
+
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbp
+    pop rbx
+
     sti
     ret
+
+.no_user_context:
+    ;
+    ; ring3_enter 없이 SYS_exit이 들어온 경우.
+    ; 복귀할 커널 컨텍스트가 없으므로 여기서 멈춘다.
+    ;
+    hlt
+    jmp .no_user_context

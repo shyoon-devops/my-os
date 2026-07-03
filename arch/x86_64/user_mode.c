@@ -5,6 +5,7 @@
 #include "heap.h"
 #include "pmm.h"
 #include "print.h"
+#include "process.h"
 #include "task.h"
 #include "types.h"
 #include "user_mode.h"
@@ -23,14 +24,6 @@ extern u64 ring3_enter(u64 user_rip, u64 user_rsp, u64* saved_kernel_rsp_slot);
 extern void ring3_user_entry(void);
 extern u8 ring3_user_blob_start[];
 extern u8 ring3_user_blob_end[];
-
-typedef struct user_exec_task_ctx {
-    char command[USER_EXEC_PATH_MAX];
-    char path[USER_EXEC_PATH_MAX];
-    volatile u32 done;
-    s32 status;
-    u64 exit_code;
-} user_exec_task_ctx_t;
 
 static u8 smoke_stack[SMOKE_STACK_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static u32 ready = 0;
@@ -119,26 +112,6 @@ static void mark_user_range(u64 start, u64 size) {
 
 static u32 is_space(char c) {
     return c == ' ' || c == '\t';
-}
-
-static void copy_string(char* out, const char* in, u64 out_size) {
-    if (!out || out_size == 0) {
-        return;
-    }
-
-    if (!in) {
-        out[0] = '\0';
-        return;
-    }
-
-    u64 i = 0;
-
-    while (in[i] && i + 1 < out_size) {
-        out[i] = in[i];
-        i++;
-    }
-
-    out[i] = '\0';
 }
 
 static u32 copy_first_arg(const char* args, char* out, u64 out_size) {
@@ -380,7 +353,7 @@ static s32 map_load_segment(
     return 0;
 }
 
-static s32 run_path(const char* path, u64* out_exit_code) {
+s32 user_mode_run_path(const char* path, u64* out_exit_code) {
     if (out_exit_code) {
         *out_exit_code = 0;
     }
@@ -445,7 +418,7 @@ static s32 run_path(const char* path, u64* out_exit_code) {
     task_user_context_t* uctx = task_current_user_context();
 
     if (!uctx) {
-        print("run_path: no current task for ring3 enter\n");
+        print("user_mode_run_path: no current task for ring3 enter\n");
         unmap_range(USER_EXEC_STACK_BOTTOM, USER_EXEC_STACK_SIZE);
 
         if (mapped_begin != 0 && mapped_end > mapped_begin) {
@@ -487,70 +460,40 @@ static void print_result(const char* command_name, const char* target, u64 exit_
     print("\n");
 }
 
-static void user_task_entry(void* arg) {
-    user_exec_task_ctx_t* ctx = (user_exec_task_ctx_t*)arg;
-
-    if (!ctx) {
-        return;
-    }
-
-    ctx->status = run_path(ctx->path, &ctx->exit_code);
-    ctx->done = 1;
-}
-
-static void wait_user_task(user_exec_task_ctx_t* ctx) {
-    while (ctx && !ctx->done) {
-        if (task_current()) {
-            task_yield();
-        } else {
-            task_run_once();
-        }
-    }
-}
-
+/*
+ * exec 명령의 본체.
+ *
+ * user ELF 실행은 이제 process 모듈이 소유한다:
+ *   process_create() → user-elf task 생성 → user_mode_run_path()
+ * shell task는 process_wait()으로 종료와 exit code만 회수한다.
+ */
 static void run_command(const char* command_name, const char* target) {
     print("loading user ELF: ");
     print(target);
     print("\n");
 
-    user_exec_task_ctx_t* ctx = (user_exec_task_ctx_t*)kzalloc(sizeof(user_exec_task_ctx_t));
+    u32 pid = process_create(target);
 
-    if (!ctx) {
+    if (pid == 0) {
         print(command_name);
-        print(": failed to allocate user task context\n");
+        print(": failed to create process\n");
         return;
     }
 
-    copy_string(ctx->command, command_name, sizeof(ctx->command));
-    copy_string(ctx->path, target, sizeof(ctx->path));
-    ctx->done = 0;
-    ctx->status = -1;
-    ctx->exit_code = 0;
-
-    u32 task_id = task_create("user-elf", user_task_entry, ctx);
-
-    if (task_id == 0) {
-        print(command_name);
-        print(": failed to create user task\n");
-        kfree(ctx);
-        return;
-    }
-
-    print("user task = ");
-    print_dec64(task_id);
+    print("pid = ");
+    print_dec64(pid);
     print("\n");
 
-    wait_user_task(ctx);
+    u64 exit_code = 0;
+    s32 result = process_wait(pid, &exit_code);
 
-    if (ctx->status != 0) {
+    if (result != PROCESS_WAIT_OK) {
         print(command_name);
         print(": failed to run user ELF\n");
-        kfree(ctx);
         return;
     }
 
-    print_result(command_name, target, ctx->exit_code);
-    kfree(ctx);
+    print_result(command_name, target, exit_code);
 }
 
 static void cmd_initrun(const char* args) {

@@ -2,6 +2,7 @@
 #include "console.h"
 #include "fd.h"
 #include "print.h"
+#include "process.h"
 #include "syscall.h"
 #include "types.h"
 
@@ -88,10 +89,10 @@ static u64 sys_getpid(
     (void)arg5;
 
     /*
-     * 아직 user process가 없으므로 고정 PID를 반환한다.
-     * Phase 11 user process / exec에서 실제 process id로 교체한다.
+     * 현재 task에 연결된 process의 pid.
+     * kernel task에서 호출되면(process 없음) 0을 반환한다.
      */
-    return 1;
+    return process_current_pid();
 }
 
 static u64 sys_exit(

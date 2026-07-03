@@ -89,7 +89,9 @@ static const char* shell_completion_commands[] = {
     "elfload",
     "elfinfo",
     "initrun",
-    "exec"
+    "exec",
+    "ps",
+    "wait"
 };
 
 #define SHELL_COMPLETION_COUNT \
